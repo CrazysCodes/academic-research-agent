@@ -44,13 +44,39 @@
 
 ### E2E 联调（待完成）
 
-> 前提：配置好 `backend/.env`（OPENAI_API_KEY、QDRANT_URL），启动 Qdrant
+**启动步骤：**
+
+```bash
+# 1. 启动 Qdrant
+docker compose -f docker-compose.infra.yml up -d
+
+# 2. 配置并启动后端（backend/ 目录下）
+cp .env.example .env   # 填入 OPENAI_API_KEY、QDRANT_URL
+UV_PROJECT_ENVIRONMENT=../venvs/backend uv run uvicorn app.main:app --reload
+# → http://localhost:8000/docs
+
+# 3. 启动前端（frontend/ 目录下）
+cp .env.local.example .env.local   # 首次
+npm run dev
+# → http://localhost:3000
+```
+
+**验收检查清单：**
 
 - [ ] `GET /health` 返回 `{"status": "ok"}`
 - [ ] 上传 PDF → 返回 `{ paper_id, status: "processing" }`
 - [ ] 轮询 status → 最终变为 `"ready"`，前端卡片状态自动更新
 - [ ] 点选论文 → 对话页提问 → 流式返回答案
 - [ ] 删除论文 → Qdrant collection 清除，卡片消失
+
+**常见问题排查：**
+
+| 现象 | 方向 |
+|------|------|
+| status 一直 processing | 后端日志查 BackgroundTask 报错 |
+| chat 返回 404 "No relevant content" | Qdrant 是否连通，collection 是否创建 |
+| 前端收不到 SSE | CORS 配置，`cors_origins` 是否含 `http://localhost:3000` |
+| PDF 解析失败 | pymupdf4llm 是否安装，临时文件权限 |
 
 ---
 

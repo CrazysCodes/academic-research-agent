@@ -81,49 +81,6 @@ UV_PROJECT_ENVIRONMENT=../venvs/backend uv run uvicorn app.main:app --reload
 
 ---
 
-## 本地联调流程（Phase 1）
-
-### 前提
-
-- `.env` 已配置（`OPENAI_API_KEY`、`QDRANT_URL`）
-- Qdrant 已启动
-
-### 启动步骤
-
-```bash
-# 1. 启动 Qdrant
-docker compose -f docker-compose.infra.yml up -d
-
-# 2. 启动后端（backend/ 目录下）
-UV_PROJECT_ENVIRONMENT=../venvs/backend uv run uvicorn app.main:app --reload --port 8000
-# → Swagger UI: http://localhost:8000/docs
-
-# 3. 启动前端（frontend/ 目录下）
-cp .env.local.example .env.local   # 首次
-npm run dev
-# → http://localhost:3000
-```
-
-### E2E 联调检查清单
-
-- [ ] `GET /health` 返回 `{"status": "ok"}`
-- [ ] 上传 PDF → 返回 `{ paper_id, status: "processing" }`
-- [ ] 轮询 `GET /api/papers/{id}/status` → 最终变为 `"ready"`
-- [ ] 前端文献库页面显示论文卡片，状态自动从「解析中」变「就绪」
-- [ ] 点选论文卡片 → 进入对话页 → 提问 → 流式返回答案
-- [ ] 删除论文 → Qdrant collection 清除，卡片消失
-
-### 常见问题
-
-| 现象 | 排查方向 |
-|------|----------|
-| status 一直 processing | 后端日志查 BackgroundTask 报错 |
-| chat 返回 404 "No relevant content" | Qdrant 是否连通，collection 是否创建成功 |
-| 前端收不到 SSE | 检查 CORS 配置，`cors_origins` 是否包含 `http://localhost:3000` |
-| PDF 解析失败 | 检查 pymupdf4llm 是否正确安装，临时文件权限 |
-
----
-
 ## 如何使用本规范
 
 - **新增依赖** → 用 `uv add`，不手改 `pyproject.toml`
