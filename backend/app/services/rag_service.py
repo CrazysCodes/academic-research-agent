@@ -2,7 +2,7 @@
 RAG service: chunking → embedding → index / retrieve.
 """
 from langchain_openai import OpenAIEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from app.config import settings
 from app.repositories import vector_repo
