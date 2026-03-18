@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Read(//Users/dongjunhao.6/.claude/**)",
+      "WebFetch(domain:github.com)",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/jgraph/drawio-mcp/main/skill-cli/drawio/SKILL.md\")",
+      "Bash(/Applications/draw.io.app/Contents/MacOS/draw.io -x -f png -e -b 10 -o /Users/dongjunhao.6/codes/VibeProject/academic-research-agent/docs/system-architecture.drawio.png /Users/dongjunhao.6/codes/VibeProject/academic-research-agent/docs/system-architecture.drawio)",
+      "Bash(/Applications/draw.io.app/Contents/MacOS/draw.io -x -f png -e -b 10 -o /Users/dongjunhao.6/codes/VibeProject/academic-research-agent/docs/fastapi-layered-architecture.drawio.png /Users/dongjunhao.6/codes/VibeProject/academic-research-agent/docs/fastapi-layered-architecture.drawio)",
+      "Bash(mv /Users/dongjunhao.6/codes/VibeProject/academic-research-agent/docs/*.drawio /Users/dongjunhao.6/codes/VibeProject/academic-research-agent/docs/images/)",
+      "Bash(mv /Users/dongjunhao.6/codes/VibeProject/academic-research-agent/docs/*.png /Users/dongjunhao.6/codes/VibeProject/academic-research-agent/docs/images/)",
+      "Bash(uv --version)",
+      "Bash(npm --version)",
+      "Bash(pnpm --version)",
+      "Bash(git --version)",
+      "Bash(mkdir -p backend venvs)",
+      "Bash(uv init:*)",
+      "Bash(uv venv:*)",
+      "Bash(mkdir -p app/api/routes app/services app/core/agents app/core/tools app/models app/repositories tests)",
+      "Bash(touch app/__init__.py app/api/__init__.py app/api/routes/__init__.py app/services/__init__.py app/core/__init__.py app/core/agents/__init__.py app/core/tools/__init__.py app/models/__init__.py app/repositories/__init__.py)",
+      "Bash(uv add:*)",
+      "Bash(npx create-next-app@latest frontend --typescript --tailwind --app --no-eslint --no-src-dir --import-alias \"@/*\" --no-turbopack)",
+      "Bash(printf '\\\\n')",
+      "Bash(uv sync:*)",
+      "Bash(rm -rf backend/.venv)",
+      "Bash(cp -r venvs/backend backend/.venv)",
+      "Bash(UV_PROJECT_ENVIRONMENT=../venvs/backend uv sync)"
+    ]
+  }
+}
