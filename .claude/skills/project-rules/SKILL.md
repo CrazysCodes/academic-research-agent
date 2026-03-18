@@ -81,6 +81,28 @@ UV_PROJECT_ENVIRONMENT=../venvs/backend uv run uvicorn app.main:app --reload
 
 ---
 
+## 分支规范
+
+本项目按 Phase 或功能模块创建 feature 分支，**不在 main 直接开发**：
+
+```
+main                     ← 稳定主干，只合并
+feature/phase1-e2e       ← Phase 1 联调
+feature/phase2-agents    ← LangGraph Agent
+feature/phase3-export    ← 写作辅助导出
+fix/xxx                  ← bug 修复
+```
+
+**工作流：**
+```bash
+git checkout -b feature/xxx   # 开始新功能
+# 开发 + commit...
+git checkout main && git merge feature/xxx
+git branch -d feature/xxx
+```
+
+---
+
 ## 如何使用本规范
 
 - **新增依赖** → 用 `uv add`，不手改 `pyproject.toml`
@@ -88,3 +110,4 @@ UV_PROJECT_ENVIRONMENT=../venvs/backend uv run uvicorn app.main:app --reload
 - **新建前端组件** → 确认放对子目录（components/papers/ 或 components/chat/）
 - **完成任务** → 立即更新 `docs/TODO.md`
 - **提交代码** → 中文 commit，格式 `类型(范围): 描述`
+- **开发新功能** → 先从 main 切出 feature 分支，完成后再合并
