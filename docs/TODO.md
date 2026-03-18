@@ -33,14 +33,24 @@
 - [x] `POST /api/chat` — 单文档 RAG 问答，SSE 流式输出
 - [x] `POST /api/analyze` — 多文档对比分析，SSE 流式输出
 
-### 前端（待做）
+### 前端 ✅ 完成
 
-- [ ] 文档上传页 `app/papers/page.tsx` — 拖拽上传 + 论文列表 + 状态轮询
-- [ ] 对话页 `app/chat/page.tsx` — 流式消息渲染
-- [ ] `components/papers/UploadDropzone.tsx`
-- [ ] `components/papers/PaperCard.tsx` — 显示状态 processing/ready/failed
-- [ ] `components/chat/MessageList.tsx` + `StreamingMessage.tsx`
-- [ ] 联调：上传文档 → 等待 ready → 对话问答 E2E 跑通
+- [x] 文档上传页 `app/papers/page.tsx` — 拖拽上传 + 论文列表 + 状态轮询
+- [x] 对话页 `app/chat/page.tsx` — 流式消息渲染
+- [x] `components/papers/UploadDropzone.tsx` — 拖拽 + 点击上传，50MB 限制
+- [x] `components/papers/PaperCard.tsx` — 状态展示，processing 每 2s 轮询
+- [x] `components/chat/MessageList.tsx` — 消息气泡 + 流式光标动画
+- [x] `components/chat/ChatInput.tsx` — Enter 发送，Shift+Enter 换行
+
+### E2E 联调（待完成）
+
+> 前提：配置好 `backend/.env`（OPENAI_API_KEY、QDRANT_URL），启动 Qdrant
+
+- [ ] `GET /health` 返回 `{"status": "ok"}`
+- [ ] 上传 PDF → 返回 `{ paper_id, status: "processing" }`
+- [ ] 轮询 status → 最终变为 `"ready"`，前端卡片状态自动更新
+- [ ] 点选论文 → 对话页提问 → 流式返回答案
+- [ ] 删除论文 → Qdrant collection 清除，卡片消失
 
 ---
 

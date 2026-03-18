@@ -1,5 +1,6 @@
-# Claude Code
-.claude/
+# Claude Code - 只忽略本地设置，skills 提交到仓库
+.claude/settings.json
+.claude/settings.local.json
 
 # Python venvs
 venvs/
