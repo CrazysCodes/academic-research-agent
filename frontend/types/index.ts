@@ -1,9 +1,20 @@
+export type PaperStatusValue = "processing" | "ready" | "failed"
+
 export interface Paper {
   id: string
   title: string
-  abstract: string
-  created_at: string
+  filename: string
+  status: PaperStatusValue
+  error?: string
   chunk_count: number
+  created_at: string
+}
+
+export interface PaperStatus {
+  paper_id: string
+  status: PaperStatusValue
+  chunk_count: number
+  error?: string | null
 }
 
 export interface ChatMessage {
@@ -15,11 +26,4 @@ export interface AnalyzeRequest {
   paper_ids: string[]
   query: string
   mode: "single" | "compare"
-}
-
-export interface AnalyzeResponse {
-  answer: string
-  sources: string[]
-  tokens_used: number
-  mermaid_diagram?: string
 }

@@ -1,11 +1,20 @@
-import type { AnalyzeRequest, Paper } from "@/types"
+import type { AnalyzeRequest, Paper, PaperStatus } from "@/types"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, init)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail ?? `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+// ---------- Papers ----------
+
 export async function fetchPapers(): Promise<Paper[]> {
-  const res = await fetch(`${BASE_URL}/api/papers`)
-  if (!res.ok) throw new Error("Failed to fetch papers")
-  const data = await res.json()
+  const data = await request<{ papers: Paper[] }>("/api/papers")
   return data.papers
 }
 
@@ -13,18 +22,60 @@ export async function uploadPaper(file: File, title: string): Promise<Paper> {
   const form = new FormData()
   form.append("file", file)
   form.append("title", title)
-  const res = await fetch(`${BASE_URL}/api/papers/upload`, {
+  const data = await request<{ paper: Paper }>("/api/papers/upload", {
     method: "POST",
     body: form,
   })
-  if (!res.ok) throw new Error("Upload failed")
-  return res.json()
+  return data.paper
 }
 
-export async function deletePaper(id: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/papers/${id}`, { method: "DELETE" })
-  if (!res.ok) throw new Error("Delete failed")
+export async function fetchPaperStatus(paperId: string): Promise<PaperStatus> {
+  return request<PaperStatus>(`/api/papers/${paperId}/status`)
 }
+
+export async function deletePaper(paperId: string): Promise<void> {
+  await request(`/api/papers/${paperId}`, { method: "DELETE" })
+}
+
+// ---------- Chat (SSE) ----------
+
+export async function streamChat(
+  paperIds: string[],
+  query: string,
+  onChunk: (text: string) => void,
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paper_ids: paperIds, query }),
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail ?? `HTTP ${res.status}`)
+  }
+
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    const lines = decoder.decode(value).split("\n").filter((l) => l.startsWith("data: "))
+    for (const line of lines) {
+      const raw = line.slice(6)
+      if (raw === "[DONE]") return
+      try {
+        const data = JSON.parse(raw)
+        if (data.delta) onChunk(data.delta)
+      } catch {
+        // 忽略格式错误的 SSE 行
+      }
+    }
+  }
+}
+
+// ---------- Analyze (SSE) ----------
 
 export async function streamAnalyze(
   request: AnalyzeRequest,
@@ -35,7 +86,11 @@ export async function streamAnalyze(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
   })
-  if (!res.ok) throw new Error("Analyze failed")
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail ?? `HTTP ${res.status}`)
+  }
 
   const reader = res.body!.getReader()
   const decoder = new TextDecoder()
@@ -43,13 +98,16 @@ export async function streamAnalyze(
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
-    const chunk = decoder.decode(value)
-    const lines = chunk.split("\n").filter((l) => l.startsWith("data: "))
+    const lines = decoder.decode(value).split("\n").filter((l) => l.startsWith("data: "))
     for (const line of lines) {
       const raw = line.slice(6)
       if (raw === "[DONE]") return
-      const data = JSON.parse(raw)
-      if (data.delta) onChunk(data.delta)
+      try {
+        const data = JSON.parse(raw)
+        if (data.delta) onChunk(data.delta)
+      } catch {
+        // 忽略
+      }
     }
   }
 }
