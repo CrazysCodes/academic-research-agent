@@ -2,7 +2,7 @@
 
 > 目标：学术研究 Agent — 文献上传 → 多文档检索问答 → 对比分析 → 辅助写作全流程 AI 助理
 >
-> 参考技术方案：[tech-spec.md](./tech-spec.md)
+> 参考技术方案：[tech-spec.md](./tech-spec.md) | 文档解析方案：[doc-parsing.md](./doc-parsing.md)
 
 ---
 
@@ -11,33 +11,36 @@
 - [x] 项目骨架搭建（monorepo）
 - [x] 后端 FastAPI 框架 + uv 环境
 - [x] 前端 Next.js 14 + shadcn/ui
-- [x] Docker Compose 配置
-- [x] Git 仓库初始化
+- [x] Docker Compose（应用 + 基础设施分离）
+- [x] Git 仓库初始化并推送
 
 ---
 
-## Phase 1 — 核心链路（优先级最高）
-
-> 目标：跑通「上传文档 → RAG 问答」完整链路
+## Phase 1 — 核心链路 ✅ 后端完成
 
 ### 后端
 
-- [ ] 补充 AI 依赖：`langchain langchain-openai qdrant-client openai`
-- [ ] `app/services/doc_service.py` — 调用 2markdown 解析 PDF/Word → Markdown
-- [ ] `app/repositories/vector_repo.py` — Qdrant 向量存取（连接远程 Qdrant）
-- [ ] `app/services/rag_service.py` — 文本分块 + Embedding + 检索
-- [ ] 完善 `POST /api/papers/upload` — 上传 → 解析 → 分块 → 存 Qdrant
-- [ ] 完善 `GET /api/papers` — 从 DB/内存返回论文列表
-- [ ] 完善 `POST /api/chat` — 单文档 RAG 问答，SSE 流式输出
-- [ ] `app/config.py` 补充 Qdrant / 2markdown 配置项
+- [x] 依赖安装：`markitdown pymupdf4llm qdrant-client langchain langchain-openai`
+- [x] `app/models/` — Paper、ChatRequest、AnalyzeRequest、响应模型
+- [x] `app/repositories/paper_store.py` — 内存 Paper 元数据存储（Phase 4 替换为 PostgreSQL）
+- [x] `app/repositories/vector_repo.py` — Qdrant 操作（collection per paper）
+- [x] `app/services/doc_service.py` — Word（markitdown）+ PDF（pymupdf4llm）解析
+- [x] `app/services/rag_service.py` — 分块 + OpenAI Embedding + Qdrant 检索
+- [x] `POST /api/papers/upload` — 上传 → BackgroundTask 异步处理
+- [x] `GET /api/papers` — 论文列表
+- [x] `GET /api/papers/{id}/status` — 处理状态轮询
+- [x] `DELETE /api/papers/{id}` — 删除论文 + Qdrant collection
+- [x] `POST /api/chat` — 单文档 RAG 问答，SSE 流式输出
+- [x] `POST /api/analyze` — 多文档对比分析，SSE 流式输出
 
-### 前端
+### 前端（待做）
 
-- [ ] 文档上传页 `app/papers/page.tsx` — 拖拽上传 + 论文列表
+- [ ] 文档上传页 `app/papers/page.tsx` — 拖拽上传 + 论文列表 + 状态轮询
 - [ ] 对话页 `app/chat/page.tsx` — 流式消息渲染
 - [ ] `components/papers/UploadDropzone.tsx`
+- [ ] `components/papers/PaperCard.tsx` — 显示状态 processing/ready/failed
 - [ ] `components/chat/MessageList.tsx` + `StreamingMessage.tsx`
-- [ ] 联调：上传文档 → 对话问答 E2E 跑通
+- [ ] 联调：上传文档 → 等待 ready → 对话问答 E2E 跑通
 
 ---
 
@@ -52,7 +55,7 @@
 - [ ] `app/core/agents/writer_agent.py` — 内容生成 Agent
 - [ ] `app/core/agents/review_agent.py` — 质量评审 + 反思循环
 - [ ] `app/core/tools/web_search.py` — Tavily Web 搜索 Tool
-- [ ] 完善 `POST /api/analyze` — 多文档对比分析（跨 Qdrant collection 检索）
+- [ ] `/api/analyze` 升级为 LangGraph 多 Agent 流程
 
 ### 前端
 
@@ -63,8 +66,6 @@
 ---
 
 ## Phase 3 — 写作辅助
-
-> 目标：LaTeX / Mermaid 生成，完善 Agent 工具链
 
 - [ ] `app/core/tools/latex_writer.py` — LaTeX 片段生成
 - [ ] `app/core/tools/mermaid_gen.py` — Mermaid 图生成
@@ -77,10 +78,11 @@
 ## Phase 4 — 加分项（后续迭代）
 
 - [ ] MCP Server 暴露（`mcp_server.py`，供 Claude Desktop / Cursor 调用）
+- [ ] PostgreSQL 替代内存存储（`paper_store.py` → SQLAlchemy）
+- [ ] Redis 缓存 Embedding 结果（避免重复计算）
 - [ ] A2A 协议集成（Sub-Agent 微服务化）
-- [ ] 用户认证（JWT）
-- [ ] PostgreSQL 持久化替代内存存储
 - [ ] CI/CD（GitHub Actions → Docker build → 部署）
+- [ ] 用户认证（JWT）
 
 ---
 
@@ -90,5 +92,9 @@
 |------|------|------|
 | 2026-03 | Monorepo（前后端同仓库） | 个人项目，文档/Docker 共享方便 |
 | 2026-03 | uv 管理 Python 环境 | 速度快，锁文件规范 |
-| 2026-03 | 向量库/关系库先用远程 | 避免本地资源占用，加速开发迭代 |
+| 2026-03 | 向量库先用远程 Qdrant Docker | 避免本地资源占用，加速开发迭代 |
 | 2026-03 | Next.js standalone 模式 | Docker 镜像更小，生产友好 |
+| 2026-03 | Word → markitdown | Microsoft 维护，底层 mammoth，LLM-ready 输出 |
+| 2026-03 | PDF → pymupdf4llm | 比 marker 快 94x，学术 PDF 质量足够，无 GPU 依赖 |
+| 2026-03 | PDF 解析用 BackgroundTasks | 避免 HTTP 超时，前端轮询 /status |
+| 2026-03 | 内存存储 Paper 元数据 | Phase 1 够用，Phase 4 迁移 PostgreSQL |
