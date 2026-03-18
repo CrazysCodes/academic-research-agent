@@ -1,0 +1,18 @@
+# Claude Code
+.claude/
+
+# Python venvs
+venvs/
+
+# Env files
+.env
+*.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
