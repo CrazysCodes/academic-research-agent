@@ -14,10 +14,19 @@ _splitter: RecursiveCharacterTextSplitter | None = None
 def _get_embeddings() -> OpenAIEmbeddings:
     global _embeddings
     if _embeddings is None:
-        _embeddings = OpenAIEmbeddings(
-            model=settings.embedding_model,
-            openai_api_key=settings.openai_api_key,
-        )
+        api_key = settings.embedding_api_key or settings.openai_api_key
+        base_url = settings.embedding_base_url or settings.openai_base_url
+        kwargs: dict = {
+            "model": settings.embedding_model,
+            "openai_api_key": api_key,
+        }
+        if base_url:
+            kwargs["openai_api_base"] = base_url
+        # 非官方 OpenAI API 可能不支持 token 数组输入，关闭 tiktoken 预处理
+        if base_url:
+            kwargs["check_embedding_ctx_length"] = False
+        kwargs["chunk_size"] = 10  # 第三方 API 单次 batch 上限
+        _embeddings = OpenAIEmbeddings(**kwargs)
     return _embeddings
 
 

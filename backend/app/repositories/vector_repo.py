@@ -7,10 +7,6 @@ from qdrant_client.models import (
     Distance,
     VectorParams,
     PointStruct,
-    Filter,
-    FieldCondition,
-    MatchValue,
-    ScoredPoint,
 )
 from app.config import settings
 
@@ -64,21 +60,34 @@ def search(
 ) -> list[str]:
     """Search across multiple paper collections, return top-k text chunks."""
     client = get_client()
-    all_hits: list[ScoredPoint] = []
+    all_hits = []
 
     for paper_id in paper_ids:
         name = collection_name(paper_id)
         if not client.collection_exists(name):
             continue
-        hits = client.search(
+        result = client.query_points(
             collection_name=name,
-            query_vector=query_vector,
+            query=query_vector,
             limit=top_k,
         )
-        all_hits.extend(hits)
+        all_hits.extend(result.points)
 
     all_hits.sort(key=lambda h: h.score, reverse=True)
     return [str(h.payload["text"]) for h in all_hits[:top_k]]
+
+
+def get_all_chunks(paper_id: str) -> list[dict]:
+    """返回该论文所有切块，按 chunk_index 排序。"""
+    client = get_client()
+    name = collection_name(paper_id)
+    if not client.collection_exists(name):
+        return []
+    points, _ = client.scroll(collection_name=name, limit=10000)
+    return sorted(
+        [{"index": p.payload["chunk_index"], "text": p.payload["text"]} for p in points],
+        key=lambda x: x["index"],
+    )
 
 
 def delete_collection(paper_id: str) -> None:

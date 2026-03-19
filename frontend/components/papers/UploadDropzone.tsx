@@ -52,17 +52,17 @@ export function UploadDropzone() {
       <p className="text-sm text-muted-foreground">
         拖拽文件到此处，或
       </p>
-      <label>
+      <label className="cursor-pointer">
         <input
           type="file"
           accept={ACCEPTED}
-          className="hidden"
+          className="sr-only"
           onChange={(e) => handleFiles(e.target.files)}
           disabled={uploading}
         />
-        <Button variant="outline" size="sm" className="cursor-pointer">
+        <span className={`inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground ${uploading ? "pointer-events-none opacity-50" : ""}`}>
           {uploading ? "上传中…" : "选择文件"}
-        </Button>
+        </span>
       </label>
       <p className="text-xs text-muted-foreground">支持 PDF、Word（最大 {MAX_MB}MB）</p>
       {error && <p className="text-xs text-destructive">{error}</p>}

@@ -1,4 +1,4 @@
-import type { AnalyzeRequest, Paper, PaperStatus } from "@/types"
+import type { AnalyzeRequest, Conversation, LLMSettings, Paper, PaperStatus } from "@/types"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
@@ -8,6 +8,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body = await res.json().catch(() => ({}))
     throw new Error(body.detail ?? `HTTP ${res.status}`)
   }
+  if (res.status === 204) return undefined as T
   return res.json()
 }
 
@@ -31,6 +32,14 @@ export async function uploadPaper(file: File, title: string): Promise<Paper> {
 
 export async function fetchPaperStatus(paperId: string): Promise<PaperStatus> {
   return request<PaperStatus>(`/api/papers/${paperId}/status`)
+}
+
+export async function fetchPaper(paperId: string): Promise<Paper> {
+  return request<Paper>(`/api/papers/${paperId}`)
+}
+
+export async function fetchPaperChunks(paperId: string): Promise<{ paper_id: string; chunks: import("@/types").PaperChunk[] }> {
+  return request(`/api/papers/${paperId}/chunks`)
 }
 
 export async function deletePaper(paperId: string): Promise<void> {
@@ -73,6 +82,58 @@ export async function streamChat(
       }
     }
   }
+}
+
+// ---------- Conversations ----------
+
+export async function listConversations(): Promise<Conversation[]> {
+  return request<Conversation[]>("/api/conversations")
+}
+
+export async function createConversation(title: string, paperIds: string[]): Promise<Conversation> {
+  return request<Conversation>("/api/conversations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, paper_ids: paperIds }),
+  })
+}
+
+export async function getConversation(convId: string): Promise<Conversation> {
+  return request<Conversation>(`/api/conversations/${convId}`)
+}
+
+export async function deleteConversation(convId: string): Promise<void> {
+  await request(`/api/conversations/${convId}`, { method: "DELETE" })
+}
+
+export async function saveMessage(convId: string, role: "user" | "assistant", content: string): Promise<void> {
+  await request(`/api/conversations/${convId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role, content }),
+  })
+}
+
+export async function renameConversation(convId: string, title: string): Promise<void> {
+  await request(`/api/conversations/${convId}/title`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  })
+}
+
+// ---------- Settings ----------
+
+export async function fetchSettings(): Promise<LLMSettings> {
+  return request<LLMSettings>("/api/settings")
+}
+
+export async function updateSettings(data: Partial<LLMSettings>): Promise<LLMSettings> {
+  return request<LLMSettings>("/api/settings", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
 }
 
 // ---------- Analyze (SSE) ----------

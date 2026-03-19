@@ -15,5 +15,23 @@ services:
       timeout: 5s
       retries: 3
 
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ara}
+      POSTGRES_USER: ${POSTGRES_USER:-ara}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ara}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ara} -d ${POSTGRES_DB:-ara}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   qdrant_data:
+  postgres_data:

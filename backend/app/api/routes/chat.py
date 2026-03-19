@@ -1,51 +1,69 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_paper_store
-from app.config import settings
+from app.api.deps import get_db_session
+from app.core.llm import create_chat_llm
 from app.models.request import ChatRequest
-from app.repositories.paper_store import PaperStore
+from app.repositories import paper_repo
 from app.services import rag_service
 
 router = APIRouter()
 
-SYSTEM_PROMPT = """You are an academic research assistant.
+RAG_SYSTEM_PROMPT = """You are an academic research assistant.
 Answer the user's question based ONLY on the provided context from research papers.
 If the context does not contain enough information, say so clearly.
 Cite relevant parts of the context when answering.
 Respond in the same language as the user's question."""
 
+GENERAL_SYSTEM_PROMPT = """You are a helpful academic research assistant.
+Answer the user's question thoroughly and accurately.
+Respond in the same language as the user's question."""
 
-async def _stream_response(query: str, context_chunks: list[str]):
-    llm = ChatOpenAI(
-        model=settings.llm_model,
-        openai_api_key=settings.openai_api_key,
-        streaming=True,
-    )
 
+async def _stream_rag(query: str, context_chunks: list[str]):
+    llm = create_chat_llm()
     context = "\n\n---\n\n".join(context_chunks)
     messages = [
-        SystemMessage(content=SYSTEM_PROMPT),
+        SystemMessage(content=RAG_SYSTEM_PROMPT),
         HumanMessage(content=f"Context:\n{context}\n\nQuestion: {query}"),
     ]
-
     async for chunk in llm.astream(messages):
         if chunk.content:
             yield f"data: {json.dumps({'delta': chunk.content})}\n\n"
+    yield "data: [DONE]\n\n"
 
+
+async def _stream_general(query: str):
+    llm = create_chat_llm()
+    messages = [
+        SystemMessage(content=GENERAL_SYSTEM_PROMPT),
+        HumanMessage(content=query),
+    ]
+    async for chunk in llm.astream(messages):
+        if chunk.content:
+            yield f"data: {json.dumps({'delta': chunk.content})}\n\n"
     yield "data: [DONE]\n\n"
 
 
 @router.post("")
 async def chat_stream(
     req: ChatRequest,
-    store: PaperStore = Depends(get_paper_store),
+    db: AsyncSession = Depends(get_db_session),
 ) -> StreamingResponse:
+    # 通用 LLM 模式（未选论文）
+    if not req.paper_ids:
+        return StreamingResponse(
+            _stream_general(req.query),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    # RAG 模式 — 从 DB 验证论文状态
     for paper_id in req.paper_ids:
-        paper = store.get(paper_id)
+        paper = await paper_repo.get(db, paper_id)
         if not paper:
             raise HTTPException(status_code=404, detail=f"Paper {paper_id} not found")
         if paper.status != "ready":
@@ -59,7 +77,7 @@ async def chat_stream(
         raise HTTPException(status_code=404, detail="No relevant content found in selected papers")
 
     return StreamingResponse(
-        _stream_response(req.query, context_chunks),
+        _stream_rag(req.query, context_chunks),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

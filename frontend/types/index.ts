@@ -10,6 +10,11 @@ export interface Paper {
   created_at: string
 }
 
+export interface PaperChunk {
+  index: number
+  text: string
+}
+
 export interface PaperStatus {
   paper_id: string
   status: PaperStatusValue
@@ -26,4 +31,22 @@ export interface AnalyzeRequest {
   paper_ids: string[]
   query: string
   mode: "single" | "compare"
+}
+
+export interface LLMSettings {
+  llm_model: string
+  openai_api_key: string
+  openai_base_url: string
+  embedding_model: string
+  embedding_api_key: string
+  embedding_base_url: string
+}
+
+export interface Conversation {
+  id: string
+  title: string
+  paper_ids: string[]
+  created_at: string
+  updated_at: string
+  messages: ChatMessage[]
 }
