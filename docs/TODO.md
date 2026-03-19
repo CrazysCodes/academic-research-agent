@@ -112,6 +112,12 @@ npm run dev
 >
 > **分支**：`feature/phase2-agent`
 
+### ⚠️ 开发前待决策
+
+- [ ] **Tavily Web 搜索**：是否有 Tavily API Key？无则 ReviewNode 仅做质量评审，跳过外部搜索 Tool
+- [ ] **分析页与问答页关系**：`/analyze` 单独页（结构化长报告） vs 合并进 `/chat` 页面？
+- [ ] **ReviewNode 反思轮数**：当前设定 `score < 7` 打回重写，最多 2 轮；轮数越多响应越慢，是否调整阈值或轮数上限？
+
 ### Agent 图设计（LangGraph StateGraph）
 
 ```
