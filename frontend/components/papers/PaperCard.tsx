@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect } from "react"
+import Link from "next/link"
+import { ExternalLink } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -71,10 +73,25 @@ export function PaperCard({ paper }: Props) {
               : "正在解析…"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <Badge variant={STATUS_VARIANT[paper.status]}>
             {STATUS_LABEL[paper.status]}
           </Badge>
+          {paper.status === "ready" && (
+            <Link
+              href={`/papers/${paper.id}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                title="查看详情"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Button>
+            </Link>
+          )}
           <Button
             variant="ghost"
             size="icon"

@@ -156,6 +156,52 @@ Tool调用   → Mermaid生成、LaTeX片段、Web搜索
 
 ---
 
+## 语言技术路线决策（2026-03 定稿）
+
+### 结论
+
+**先用 Python 完成完整 demo，之后 1:1 用 Spring AI 重写一套 Java 版本。**
+
+### 为什么先做 Python
+
+| 维度 | Python（LangChain/LangGraph） | Java（Spring AI / LangChain4j） |
+|------|------|------|
+| 生态成熟度 | ⭐⭐⭐⭐⭐ 行业标准 | ⭐⭐⭐ 追赶中，约落后 1-2 年 |
+| LangGraph | 官方支持，功能完整 | 无直接对应，手动实现 |
+| AI 岗 JD 要求 | 大多数写 Python | Java AI 岗多为大厂内部平台 |
+| 面试竞争力 | AI 应用岗直接加分 | 需额外解释选型原因 |
+
+- LangGraph 暂无 Java 对应，Phase 2 Agent 功能只有 Python 才能快速实现
+- 现在重写 = 消耗时间但不增加功能
+
+### Python Demo 完成后的 Java 迁移
+
+**目标框架：Spring AI（首选）**
+- VMware/Broadcom 官方维护，Spring 生态天然集成
+- 支持 OpenAI、Azure、Ollama 等多 Provider
+- ChatClient / EmbeddingClient / VectorStore 接口与 LangChain 概念 1:1 对应
+
+**对应关系：**
+```
+Python                    →  Java Spring AI
+──────────────────────────────────────────────
+ChatOpenAI                →  ChatClient (OpenAI)
+OpenAIEmbeddings          →  EmbeddingClient
+Qdrant VectorStore        →  QdrantVectorStore
+RecursiveCharacterSplitter→  TokenTextSplitter
+LangGraph StateGraph      →  手动实现 / Spring Batch
+FastAPI Router            →  Spring MVC @RestController
+pydantic BaseModel        →  Java Record / @RequestBody
+SQLAlchemy async          →  Spring Data JPA + R2DBC
+```
+
+**迁移策略：**
+- 核心 RAG 链路（Phase 1）：Spring AI 可以完整覆盖
+- LangGraph Agent（Phase 2）：改用 Spring AI Advisor Chain + 手动状态机
+- 面试时可说："先用 Python 生态快速验证，后续按团队技术栈可迁移 Java"
+
+---
+
 ## 关键概念备忘
 
 ### Agent 编排 vs A2A 协议

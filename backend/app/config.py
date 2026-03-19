@@ -4,9 +4,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # API Keys
+    # LLM Provider（支持任意 OpenAI 兼容 API）
     openai_api_key: str = ""
-    anthropic_api_key: str = ""
+    openai_base_url: str = ""  # 留空则使用官方，填入自定义 endpoint
+
+    # Embedding Provider（留空则复用上面的 openai 配置）
+    embedding_api_key: str = ""
+    embedding_base_url: str = ""
 
     # Qdrant
     qdrant_url: str = "http://localhost:6333"
@@ -14,7 +18,7 @@ class Settings(BaseSettings):
 
     # Embedding
     embedding_model: str = "text-embedding-3-small"
-    embedding_dim: int = 1536
+    embedding_dim: int = 1024  # text-embedding-v4 默认 1024
 
     # Chunking
     chunk_size: int = 512
@@ -22,6 +26,9 @@ class Settings(BaseSettings):
 
     # LLM
     llm_model: str = "gpt-4o-mini"
+
+    # Database
+    database_url: str = "postgresql://ara:ara@localhost:5432/ara"
 
     # CORS
     cors_origins: list[str] = ["http://localhost:3000"]

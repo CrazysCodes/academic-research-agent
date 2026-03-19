@@ -1,13 +1,13 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_paper_store
-from app.config import settings
+from app.api.deps import get_db_session
+from app.core.llm import create_chat_llm
 from app.models.request import AnalyzeRequest
-from app.repositories.paper_store import PaperStore
+from app.repositories import paper_repo
 from app.services import rag_service
 
 router = APIRouter()
@@ -23,11 +23,7 @@ Be specific and cite which paper each point comes from when possible."""
 
 
 async def _stream_analysis(query: str, context_chunks: list[str], mode: str):
-    llm = ChatOpenAI(
-        model=settings.llm_model,
-        openai_api_key=settings.openai_api_key,
-        streaming=True,
-    )
+    llm = create_chat_llm()
     system = COMPARE_PROMPT if mode == "compare" else SINGLE_PROMPT
     context = "\n\n---\n\n".join(context_chunks)
     messages = [
@@ -43,10 +39,10 @@ async def _stream_analysis(query: str, context_chunks: list[str], mode: str):
 @router.post("")
 async def analyze(
     req: AnalyzeRequest,
-    store: PaperStore = Depends(get_paper_store),
+    db: AsyncSession = Depends(get_db_session),
 ) -> StreamingResponse:
     for paper_id in req.paper_ids:
-        paper = store.get(paper_id)
+        paper = await paper_repo.get(db, paper_id)
         if not paper:
             raise HTTPException(status_code=404, detail=f"Paper {paper_id} not found")
         if paper.status != "ready":
