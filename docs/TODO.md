@@ -106,24 +106,61 @@ npm run dev
 
 ---
 
-## Phase 2 — Agent 功能
+## Phase 2 — LangGraph 多 Agent 研究分析
 
-> 目标：多文档对比 + LangGraph Agent 编排
+> **目标**：可演示的多 Agent 研究分析流程。输入：1~N 篇论文 + 分析问题；输出：结构化分析报告，带实时 Agent 执行进度展示。
+>
+> **分支**：`feature/phase2-agent`
 
-### 后端
+### Agent 图设计（LangGraph StateGraph）
 
-- [ ] `app/core/graph.py` — LangGraph StateGraph 定义（ResearchState）
-- [ ] `app/core/agents/research_agent.py` — 检索规划 Agent
-- [ ] `app/core/agents/writer_agent.py` — 内容生成 Agent
-- [ ] `app/core/agents/review_agent.py` — 质量评审 + 反思循环
-- [ ] `app/core/tools/web_search.py` — Tavily Web 搜索 Tool
-- [ ] `/api/analyze` 升级为 LangGraph 多 Agent 流程
+```
+用户输入
+  → PlannerNode    拆解问题为 3~5 个子查询，决定检索策略
+  → RetrieverNode  并发 RAG 检索，聚合 context chunks
+  → WriterNode     生成结构化报告（摘要 / 对比 / 结论各节）
+  → ReviewNode     质量评分(0-10)，< 7分打回 WriterNode 重写（最多2轮）
+  → Done           推送最终报告
+```
 
-### 前端
+### SSE 事件协议
 
-- [ ] 多文档选择器 `components/papers/PaperSelector.tsx`
-- [ ] 对比分析页 `app/analyze/page.tsx`
-- [ ] Mermaid 图渲染组件
+```json
+{ "event": "node",  "name": "planner" }      // 节点切换进度
+{ "event": "delta", "content": "..." }        // 内容流式输出
+{ "event": "done" }                           // 完成
+```
+
+### 后端任务
+
+**基础**
+- [ ] 安装依赖：`langgraph`，可选 `tavily-python`
+- [ ] `app/core/state.py` — ResearchState（TypedDict：query, paper_ids, sub_queries, context_chunks, draft, score, iterations）
+
+**Agent 节点**
+- [ ] `app/core/nodes/planner.py` — PlannerNode：LLM 将问题拆解为子查询列表
+- [ ] `app/core/nodes/retriever.py` — RetrieverNode：并发调用 rag_service.retrieve()，合并去重
+- [ ] `app/core/nodes/writer.py` — WriterNode：按模板生成 Markdown 结构化报告
+- [ ] `app/core/nodes/reviewer.py` — ReviewNode：评分 + 条件边（pass / retry，最多2轮）
+
+**图编排**
+- [ ] `app/core/graph.py` — StateGraph 组装，条件边（score < 7 → writer，否则 → done）
+- [ ] `app/core/tools/web_search.py` — Tavily 搜索 Tool（可选，需 TAVILY_API_KEY）
+
+**API**
+- [ ] `app/config.py` 新增 `tavily_api_key: str = ""`
+- [ ] `/api/analyze` 升级：调用 LangGraph graph.astream()，将节点事件 + 内容 delta 转 SSE 推送
+
+### 前端任务
+
+**页面**
+- [ ] `app/analyze/page.tsx` — 分析页：多文档勾选 + 问题输入 + 模式切换（单文档精读 / 多文档对比）
+- [ ] `components/analyze/AgentProgress.tsx` — Agent 执行进度条（Planner→Retriever→Writer→Reviewer）
+- [ ] `components/analyze/AnalysisResult.tsx` — 结构化报告展示（Markdown + 各节折叠）
+
+**导航 & 工具**
+- [ ] `components/layout/NavLinks.tsx` 新增「分析」tab（`/analyze`）
+- [ ] `lib/api.ts` 新增 `streamAnalyze()` 支持新 SSE 事件格式（node / delta / done）
 
 ---
 
