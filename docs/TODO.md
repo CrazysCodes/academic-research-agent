@@ -106,67 +106,57 @@ npm run dev
 
 ---
 
-## Phase 2 — LangGraph 多 Agent 研究分析
+## Phase 2 — LangGraph 多 Agent 分析 ✅ 完成
 
-> **目标**：可演示的多 Agent 研究分析流程。输入：1~N 篇论文 + 分析问题；输出：结构化分析报告，带实时 Agent 执行进度展示。
->
-> **分支**：`feature/phase2-agent`
-
-### ⚠️ 开发前待决策
-
-- [ ] **Tavily Web 搜索**：是否有 Tavily API Key？无则 ReviewNode 仅做质量评审，跳过外部搜索 Tool
-- [ ] **分析页与问答页关系**：`/analyze` 单独页（结构化长报告） vs 合并进 `/chat` 页面？
-- [ ] **ReviewNode 反思轮数**：当前设定 `score < 7` 打回重写，最多 2 轮；轮数越多响应越慢，是否调整阈值或轮数上限？
+> 目标：多文档对比 + LangGraph Agent 编排 + 分析历史持久化
 
 ### Agent 图设计（LangGraph StateGraph）
 
 ```
 用户输入
-  → PlannerNode    拆解问题为 3~5 个子查询，决定检索策略
+  → PlannerNode    拆解问题为 3~5 个子查询
   → RetrieverNode  并发 RAG 检索，聚合 context chunks
   → WriterNode     生成结构化报告（摘要 / 对比 / 结论各节）
-  → ReviewNode     质量评分(0-10)，< 7分打回 WriterNode 重写（最多2轮）
-  → Done           推送最终报告
+  → ReviewerNode   质量评分(0-10)，< 7分打回 WriterNode 重写（最多2轮）
+  → Done           持久化到 DB + 推送最终报告
 ```
+
+### 后端
+
+- [x] `app/core/state.py` — ResearchState TypedDict（query, paper_ids, sub_queries, context_chunks, draft, score, feedback, iterations）
+- [x] `app/core/nodes/planner.py` — PlannerNode：LLM 将问题拆解为子查询列表
+- [x] `app/core/nodes/retriever.py` — RetrieverNode：并发调用 rag_service.retrieve()，合并去重
+- [x] `app/core/nodes/writer.py` — WriterNode：按模板生成 Markdown 结构化报告，支持修订
+- [x] `app/core/nodes/reviewer.py` — ReviewerNode：评分 + Tavily 外部搜索补充 + 条件打回
+- [x] `app/core/graph.py` — StateGraph 组装，条件边（score < 7 → writer，否则 → done）
+- [x] `app/core/tools/web_search.py` — Tavily 搜索 Tool（可选，需 TAVILY_API_KEY）
+- [x] `app/config.py` 新增 `tavily_api_key`
+- [x] `/api/analyze` 升级：LangGraph `astream_events` → SSE（node / node_output / delta / done）
+- [x] `app/db/models.py` — AnalysisORM + AnalysisPaperORM（分析历史持久化）
+- [x] `app/repositories/analysis_repo.py` — 分析历史 CRUD
+- [x] `GET /api/analyze/history` — 历史列表
+- [x] `GET /api/analyze/history/{id}` — 历史详情
+- [x] `DELETE /api/analyze/history/{id}` — 删除历史
+- [x] Embedding / Splitter 配置指纹检测，设置页改模型后无需重启
 
 ### SSE 事件协议
 
 ```json
-{ "event": "node",  "name": "planner" }      // 节点切换进度
-{ "event": "delta", "content": "..." }        // 内容流式输出
-{ "event": "done" }                           // 完成
+{ "event": "node",        "name": "planner", "label": "规划查询" }
+{ "event": "node_output", "name": "planner", "data": {"sub_queries": [...]} }
+{ "event": "delta",       "content": "..." }
+{ "event": "done",        "analysis_id": "uuid" }
 ```
 
-### 后端任务
+### 前端
 
-**基础**
-- [ ] 安装依赖：`langgraph`，可选 `tavily-python`
-- [ ] `app/core/state.py` — ResearchState（TypedDict：query, paper_ids, sub_queries, context_chunks, draft, score, iterations）
-
-**Agent 节点**
-- [ ] `app/core/nodes/planner.py` — PlannerNode：LLM 将问题拆解为子查询列表
-- [ ] `app/core/nodes/retriever.py` — RetrieverNode：并发调用 rag_service.retrieve()，合并去重
-- [ ] `app/core/nodes/writer.py` — WriterNode：按模板生成 Markdown 结构化报告
-- [ ] `app/core/nodes/reviewer.py` — ReviewNode：评分 + 条件边（pass / retry，最多2轮）
-
-**图编排**
-- [ ] `app/core/graph.py` — StateGraph 组装，条件边（score < 7 → writer，否则 → done）
-- [ ] `app/core/tools/web_search.py` — Tavily 搜索 Tool（可选，需 TAVILY_API_KEY）
-
-**API**
-- [ ] `app/config.py` 新增 `tavily_api_key: str = ""`
-- [ ] `/api/analyze` 升级：调用 LangGraph graph.astream()，将节点事件 + 内容 delta 转 SSE 推送
-
-### 前端任务
-
-**页面**
-- [ ] `app/analyze/page.tsx` — 分析页：多文档勾选 + 问题输入 + 模式切换（单文档精读 / 多文档对比）
-- [ ] `components/analyze/AgentProgress.tsx` — Agent 执行进度条（Planner→Retriever→Writer→Reviewer）
-- [ ] `components/analyze/AnalysisResult.tsx` — 结构化报告展示（Markdown + 各节折叠）
-
-**导航 & 工具**
-- [ ] `components/layout/NavLinks.tsx` 新增「分析」tab（`/analyze`）
-- [ ] `lib/api.ts` 新增 `streamAnalyze()` 支持新 SSE 事件格式（node / delta / done）
+- [x] `app/analyze/page.tsx` — 分析页：文献选择 + 问题输入 + 历史侧边栏（加载/删除/新建）
+- [x] `components/analyze/AgentProgress.tsx` — 垂直时间线 + 可折叠节点详情面板
+- [x] `components/layout/NavLinks.tsx` — Tab 顺序调整：问答 → 文献库 → 分析
+- [x] `lib/api.ts` — `streamAnalyze()` 支持 node/node_output/delta/done 事件 + 历史 API
+- [x] `types/index.ts` — AgentSSEEvent、NodeStep、Analysis 等类型
+- [x] 问答页就地选择文献（pill 选择器，无选中即通用问答）
+- [x] 文献库页仅做上传/查看/删除，移除选择功能
 
 ---
 

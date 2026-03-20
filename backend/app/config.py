@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # Tavily Web Search（可选）
+    tavily_api_key: str = ""
+
     # Server
     debug: bool = False
 

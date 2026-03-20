@@ -1,4 +1,4 @@
-import type { AnalyzeRequest, Conversation, LLMSettings, Paper, PaperStatus } from "@/types"
+import type { Analysis, AnalyzeRequest, Conversation, LLMSettings, Paper, PaperStatus } from "@/types"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
@@ -136,12 +136,14 @@ export async function updateSettings(data: Partial<LLMSettings>): Promise<LLMSet
   })
 }
 
-// ---------- Analyze (SSE) ----------
+// ---------- Analyze (SSE, LangGraph Agent) ----------
 
 export async function streamAnalyze(
   request: AnalyzeRequest,
+  onNode: (name: string, label: string) => void,
   onChunk: (text: string) => void,
-): Promise<void> {
+  onNodeOutput?: (name: string, data: Record<string, unknown>) => void,
+): Promise<string | undefined> {
   const res = await fetch(`${BASE_URL}/api/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -155,6 +157,7 @@ export async function streamAnalyze(
 
   const reader = res.body!.getReader()
   const decoder = new TextDecoder()
+  let analysisId: string | undefined
 
   while (true) {
     const { done, value } = await reader.read()
@@ -162,13 +165,31 @@ export async function streamAnalyze(
     const lines = decoder.decode(value).split("\n").filter((l) => l.startsWith("data: "))
     for (const line of lines) {
       const raw = line.slice(6)
-      if (raw === "[DONE]") return
+      if (raw === "[DONE]") return analysisId
       try {
         const data = JSON.parse(raw)
-        if (data.delta) onChunk(data.delta)
+        if (data.event === "node") onNode(data.name, data.label)
+        else if (data.event === "delta") onChunk(data.content)
+        else if (data.event === "node_output") onNodeOutput?.(data.name, data.data)
+        else if (data.event === "done") analysisId = data.analysis_id
       } catch {
-        // 忽略
+        // 忽略格式错误的 SSE 行
       }
     }
   }
+  return analysisId
+}
+
+// ---------- Analysis History ----------
+
+export async function listAnalyses(): Promise<Analysis[]> {
+  return request<Analysis[]>("/api/analyze/history")
+}
+
+export async function getAnalysis(id: string): Promise<Analysis> {
+  return request<Analysis>(`/api/analyze/history/${id}`)
+}
+
+export async function deleteAnalysis(id: string): Promise<void> {
+  await request(`/api/analyze/history/${id}`, { method: "DELETE" })
 }
