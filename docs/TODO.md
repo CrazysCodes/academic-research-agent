@@ -106,24 +106,57 @@ npm run dev
 
 ---
 
-## Phase 2 — Agent 功能
+## Phase 2 — LangGraph 多 Agent 分析 ✅ 完成
 
-> 目标：多文档对比 + LangGraph Agent 编排
+> 目标：多文档对比 + LangGraph Agent 编排 + 分析历史持久化
+
+### Agent 图设计（LangGraph StateGraph）
+
+```
+用户输入
+  → PlannerNode    拆解问题为 3~5 个子查询
+  → RetrieverNode  并发 RAG 检索，聚合 context chunks
+  → WriterNode     生成结构化报告（摘要 / 对比 / 结论各节）
+  → ReviewerNode   质量评分(0-10)，< 7分打回 WriterNode 重写（最多2轮）
+  → Done           持久化到 DB + 推送最终报告
+```
 
 ### 后端
 
-- [ ] `app/core/graph.py` — LangGraph StateGraph 定义（ResearchState）
-- [ ] `app/core/agents/research_agent.py` — 检索规划 Agent
-- [ ] `app/core/agents/writer_agent.py` — 内容生成 Agent
-- [ ] `app/core/agents/review_agent.py` — 质量评审 + 反思循环
-- [ ] `app/core/tools/web_search.py` — Tavily Web 搜索 Tool
-- [ ] `/api/analyze` 升级为 LangGraph 多 Agent 流程
+- [x] `app/core/state.py` — ResearchState TypedDict（query, paper_ids, sub_queries, context_chunks, draft, score, feedback, iterations）
+- [x] `app/core/nodes/planner.py` — PlannerNode：LLM 将问题拆解为子查询列表
+- [x] `app/core/nodes/retriever.py` — RetrieverNode：并发调用 rag_service.retrieve()，合并去重
+- [x] `app/core/nodes/writer.py` — WriterNode：按模板生成 Markdown 结构化报告，支持修订
+- [x] `app/core/nodes/reviewer.py` — ReviewerNode：评分 + Tavily 外部搜索补充 + 条件打回
+- [x] `app/core/graph.py` — StateGraph 组装，条件边（score < 7 → writer，否则 → done）
+- [x] `app/core/tools/web_search.py` — Tavily 搜索 Tool（可选，需 TAVILY_API_KEY）
+- [x] `app/config.py` 新增 `tavily_api_key`
+- [x] `/api/analyze` 升级：LangGraph `astream_events` → SSE（node / node_output / delta / done）
+- [x] `app/db/models.py` — AnalysisORM + AnalysisPaperORM（分析历史持久化）
+- [x] `app/repositories/analysis_repo.py` — 分析历史 CRUD
+- [x] `GET /api/analyze/history` — 历史列表
+- [x] `GET /api/analyze/history/{id}` — 历史详情
+- [x] `DELETE /api/analyze/history/{id}` — 删除历史
+- [x] Embedding / Splitter 配置指纹检测，设置页改模型后无需重启
+
+### SSE 事件协议
+
+```json
+{ "event": "node",        "name": "planner", "label": "规划查询" }
+{ "event": "node_output", "name": "planner", "data": {"sub_queries": [...]} }
+{ "event": "delta",       "content": "..." }
+{ "event": "done",        "analysis_id": "uuid" }
+```
 
 ### 前端
 
-- [ ] 多文档选择器 `components/papers/PaperSelector.tsx`
-- [ ] 对比分析页 `app/analyze/page.tsx`
-- [ ] Mermaid 图渲染组件
+- [x] `app/analyze/page.tsx` — 分析页：文献选择 + 问题输入 + 历史侧边栏（加载/删除/新建）
+- [x] `components/analyze/AgentProgress.tsx` — 垂直时间线 + 可折叠节点详情面板
+- [x] `components/layout/NavLinks.tsx` — Tab 顺序调整：问答 → 文献库 → 分析
+- [x] `lib/api.ts` — `streamAnalyze()` 支持 node/node_output/delta/done 事件 + 历史 API
+- [x] `types/index.ts` — AgentSSEEvent、NodeStep、Analysis 等类型
+- [x] 问答页就地选择文献（pill 选择器，无选中即通用问答）
+- [x] 文献库页仅做上传/查看/删除，移除选择功能
 
 ---
 

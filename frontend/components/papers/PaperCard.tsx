@@ -27,8 +27,7 @@ interface Props {
 }
 
 export function PaperCard({ paper }: Props) {
-  const { updatePaper, removePaper, togglePaper, selectedPaperIds } = useAppStore()
-  const isSelected = selectedPaperIds.includes(paper.id)
+  const { updatePaper, removePaper } = useAppStore()
 
   // 轮询：processing 状态每 2 秒查一次
   useEffect(() => {
@@ -56,12 +55,7 @@ export function PaperCard({ paper }: Props) {
   }
 
   return (
-    <Card
-      className={`cursor-pointer transition-all ${
-        isSelected && paper.status === "ready" ? "ring-2 ring-primary" : ""
-      }`}
-      onClick={() => paper.status === "ready" && togglePaper(paper.id)}
-    >
+    <Card>
       <CardContent className="flex items-center justify-between gap-3 p-4">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{paper.title}</p>

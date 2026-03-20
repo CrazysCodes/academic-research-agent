@@ -7,37 +7,48 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import settings
 from app.repositories import vector_repo
 
+# ---------- 带配置指纹的惰性单例 ----------
+# 用创建时的配置值做缓存 key，设置页改了配置后自动重建实例
+
 _embeddings: OpenAIEmbeddings | None = None
+_embeddings_fingerprint: tuple = ()
+
 _splitter: RecursiveCharacterTextSplitter | None = None
+_splitter_fingerprint: tuple = ()
 
 
 def _get_embeddings() -> OpenAIEmbeddings:
-    global _embeddings
-    if _embeddings is None:
-        api_key = settings.embedding_api_key or settings.openai_api_key
-        base_url = settings.embedding_base_url or settings.openai_base_url
+    global _embeddings, _embeddings_fingerprint
+    api_key = settings.embedding_api_key or settings.openai_api_key
+    base_url = settings.embedding_base_url or settings.openai_base_url
+    fingerprint = (settings.embedding_model, api_key, base_url)
+
+    if _embeddings is None or _embeddings_fingerprint != fingerprint:
         kwargs: dict = {
             "model": settings.embedding_model,
             "openai_api_key": api_key,
         }
         if base_url:
             kwargs["openai_api_base"] = base_url
-        # 非官方 OpenAI API 可能不支持 token 数组输入，关闭 tiktoken 预处理
-        if base_url:
+            # 非官方 OpenAI API 可能不支持 token 数组输入，关闭 tiktoken 预处理
             kwargs["check_embedding_ctx_length"] = False
         kwargs["chunk_size"] = 10  # 第三方 API 单次 batch 上限
         _embeddings = OpenAIEmbeddings(**kwargs)
+        _embeddings_fingerprint = fingerprint
     return _embeddings
 
 
 def _get_splitter() -> RecursiveCharacterTextSplitter:
-    global _splitter
-    if _splitter is None:
+    global _splitter, _splitter_fingerprint
+    fingerprint = (settings.chunk_size, settings.chunk_overlap)
+
+    if _splitter is None or _splitter_fingerprint != fingerprint:
         _splitter = RecursiveCharacterTextSplitter(
             chunk_size=settings.chunk_size,
             chunk_overlap=settings.chunk_overlap,
             separators=["\n\n", "\n", "。", ".", " ", ""],
         )
+        _splitter_fingerprint = fingerprint
     return _splitter
 
 

@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 
 const NAV_LINKS = [
-  { href: "/papers", label: "文献库" },
   { href: "/chat", label: "问答" },
+  { href: "/papers", label: "文献库" },
+  { href: "/analyze", label: "分析" },
 ]
 
 const SETTINGS_LINK = { href: "/settings", label: "设置" }

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { Plus, Trash2 } from "lucide-react"
 import { MessageList } from "@/components/chat/MessageList"
 import { ChatInput } from "@/components/chat/ChatInput"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -16,6 +15,7 @@ import {
   streamChat,
 } from "@/lib/api"
 import { useAppStore } from "@/lib/store"
+import { cn } from "@/lib/utils"
 import type { ChatMessage } from "@/types"
 
 export default function ChatPage() {
@@ -39,7 +39,7 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const selectedPapers = papers.filter((p) => selectedPaperIds.includes(p.id))
+  const readyPapers = papers.filter((p) => p.status === "ready")
   const isRagMode = selectedPaperIds.length > 0
 
   // 加载对话历史列表
@@ -160,22 +160,30 @@ export default function ChatPage() {
 
       {/* ── 右侧：对话主区域 ── */}
       <div className="flex flex-1 flex-col min-w-0">
-        {/* 已选论文 / 模式指示 */}
+        {/* 文献选择栏 */}
         <div className="flex flex-wrap items-center gap-1.5 border-b px-4 py-2 min-h-[2.5rem] bg-background/80 backdrop-blur">
-          {isRagMode ? (
-            <>
-              <span className="text-xs text-muted-foreground mr-1">RAG 模式 ·</span>
-              {selectedPapers.map((p) => (
-                <Badge key={p.id} variant="secondary" className="text-xs">
-                  {p.title}
-                </Badge>
-              ))}
-            </>
+          <span className="text-xs text-muted-foreground mr-1 shrink-0">
+            {isRagMode ? "RAG 模式" : "通用问答"}
+          </span>
+          {readyPapers.length > 0 ? (
+            readyPapers.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => togglePaper(p.id)}
+                disabled={loading}
+                className={cn(
+                  "text-[11px] px-2 py-0.5 rounded-full border transition-colors",
+                  selectedPaperIds.includes(p.id)
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                )}
+              >
+                {p.title}
+              </button>
+            ))
           ) : (
             <span className="text-xs text-muted-foreground">
-              通用问答模式 — 可前往
-              <a href="/papers" className="underline underline-offset-2 mx-1">文献库</a>
-              选择论文以启用 RAG 检索
+              暂无可用文献，请先在<a href="/papers" className="underline underline-offset-2 mx-0.5">文献库</a>上传
             </span>
           )}
         </div>

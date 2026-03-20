@@ -4,7 +4,7 @@ SQLAlchemy ORM 模型。
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import ForeignKey, Integer, String, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -77,3 +77,36 @@ class MessageORM(Base):
     created_at: Mapped[str] = mapped_column(String, default=_now)
 
     conversation: Mapped["ConversationORM"] = relationship(back_populates="messages")
+
+
+class AnalysisORM(Base):
+    """多文档分析历史记录。"""
+    __tablename__ = "analyses"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    mode: Mapped[str] = mapped_column(String, default="compare")
+    result: Mapped[str] = mapped_column(Text, default="")
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    iterations: Mapped[int] = mapped_column(Integer, default=0)
+    node_outputs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, default=_now)
+
+    paper_links: Mapped[list["AnalysisPaperORM"]] = relationship(
+        back_populates="analysis", cascade="all, delete-orphan"
+    )
+
+
+class AnalysisPaperORM(Base):
+    """多对多：分析 ↔ 论文（关联表）。"""
+    __tablename__ = "analysis_papers"
+
+    analysis_id: Mapped[str] = mapped_column(
+        String, ForeignKey("analyses.id", ondelete="CASCADE"), primary_key=True
+    )
+    paper_id: Mapped[str] = mapped_column(
+        String, ForeignKey("papers.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    analysis: Mapped["AnalysisORM"] = relationship(back_populates="paper_links")
+    paper: Mapped["PaperORM"] = relationship()
