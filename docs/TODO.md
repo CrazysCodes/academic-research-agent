@@ -171,36 +171,31 @@ npm run dev
 
 ---
 
-## Phase 3 — 报告增强与导出 🚧 规划中
+## Phase 3 — 报告增强与导出 ✅ 完成
 
 > 目标：让分析报告更专业、可导出，引入图表可视化和写作辅助，提升成果产出质量
 
 ### 3.1 报告导出
 
-- [ ] `POST /api/analyze/{id}/export/markdown` — 下载 Markdown 文件
-- [ ] `POST /api/analyze/{id}/export/pdf` — 服务端 Markdown → PDF（`weasyprint` 或 `playwright`）
-- [ ] 前端分析页导出按钮（Markdown / PDF 两种格式）
-- [ ] 导出报告包含：查询问题、选中文献列表、Agent 执行摘要、正文、优化历史
+- [x] `GET /api/analyze/{id}/export/markdown` — 下载完整 Markdown 文件（含查询、文献列表、Agent 摘要、正文、优化历史）
+- [x] PDF 导出：前端 `window.print()` + `@media print` CSS（零后端依赖）
+- [x] 前端分析页导出工具栏（Markdown / PDF 两个按钮，有 analysis_id 时显示）
 
 ### 3.2 Mermaid 图表生成
 
-- [ ] `app/core/nodes/diagram_gen.py` — DiagramNode：LLM 从报告内容生成 Mermaid 关系图/流程图
-- [ ] `POST /api/analyze/{id}/diagram` — 触发图表生成，返回 Mermaid 代码
-- [ ] 前端报告页内嵌 Mermaid 渲染（`mermaid` npm 包或 `react-mermaid2`）
-- [ ] 支持图表类型：论文关系图（graph LR）、方法流程图（flowchart）、时间线（timeline）
+- [x] `POST /api/analyze/{id}/diagram` — LLM 从报告内容生成 Mermaid 代码，支持 relationship / flowchart / timeline 三种类型
+- [x] `components/analyze/MermaidDiagram.tsx` — 动态 import mermaid，useEffect 异步渲染 SVG，含错误状态
+- [x] 前端分析页结果区下方「生成图表」卡片（三种类型按钮）
 
 ### 3.3 引用格式化
 
-- [ ] `POST /api/papers/{id}/citation` — 生成指定格式引用（APA / MLA / IEEE / BibTeX）
-- [ ] LLM 从论文元数据（标题、作者、年份等）+ Tavily 搜索补全缺失字段
-- [ ] 前端文献库页每篇论文增加"复制引用"下拉按钮
+- [x] `POST /api/papers/{id}/citation` — LLM 从论文首页文本提取元数据，生成 APA / MLA / IEEE / BibTeX 格式引用
+- [x] `components/papers/PaperCard.tsx` — 就绪论文新增「引用」下拉按钮，点击复制到剪贴板 + 勾号反馈
 
 ### 3.4 写作草稿辅助
 
-- [ ] `POST /api/analyze/{id}/draft-section` — 基于报告生成指定章节草稿（摘要/引言/相关工作）
-- [ ] 请求参数：`section_type`（abstract/introduction/related_work）、`target_length`（字数目标）
-- [ ] 前端对话优化区新增"生成章节"快捷操作按钮
-- [ ] 草稿输出同样支持流式渲染
+- [x] `POST /api/analyze/{id}/draft-section` — SSE 流式生成章节草稿（摘要/引言/相关工作），基于分析报告 + 论文全文上下文
+- [x] 前端对话优化区右上角「生成：摘要 / 引言 / 相关工作」快捷按钮，流式渲染到对话消息流
 
 ---
 

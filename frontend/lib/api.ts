@@ -1,4 +1,4 @@
-import type { Analysis, AnalyzeRequest, Conversation, LLMSettings, Paper, PaperStatus } from "@/types"
+import type { Analysis, AnalyzeRequest, CitationFormat, CitationResponse, Conversation, DiagramResponse, DiagramType, LLMSettings, Paper, PaperStatus, SectionType } from "@/types"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
@@ -205,6 +205,71 @@ export async function streamRefineAnalysis(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ instruction }),
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail ?? `HTTP ${res.status}`)
+  }
+
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    const lines = decoder.decode(value).split("\n").filter((l) => l.startsWith("data: "))
+    for (const line of lines) {
+      const raw = line.slice(6)
+      if (raw === "[DONE]") return
+      try {
+        const data = JSON.parse(raw)
+        if (data.delta) onChunk(data.delta)
+      } catch {
+        // 忽略格式错误的 SSE 行
+      }
+    }
+  }
+}
+
+// ---------- Export ----------
+
+export function getExportMarkdownUrl(analysisId: string): string {
+  return `${BASE_URL}/api/analyze/${analysisId}/export/markdown`
+}
+
+// ---------- Diagram ----------
+
+export async function generateDiagram(analysisId: string, diagramType: DiagramType): Promise<DiagramResponse> {
+  return request<DiagramResponse>(`/api/analyze/${analysisId}/diagram`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ diagram_type: diagramType }),
+  })
+}
+
+// ---------- Citation ----------
+
+export async function generateCitation(paperId: string, format: CitationFormat): Promise<CitationResponse> {
+  return request<CitationResponse>(`/api/papers/${paperId}/citation`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ format }),
+  })
+}
+
+// ---------- Draft Section (SSE) ----------
+
+export async function streamDraftSection(
+  analysisId: string,
+  sectionType: SectionType,
+  targetLength: number,
+  onChunk: (text: string) => void,
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/analyze/${analysisId}/draft-section`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ section_type: sectionType, target_length: targetLength }),
   })
 
   if (!res.ok) {

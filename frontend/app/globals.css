@@ -128,3 +128,40 @@
     @apply font-sans;
   }
 }
+
+@media print {
+  .print\:hidden {
+    display: none !important;
+  }
+
+  nav,
+  aside,
+  header,
+  footer,
+  button {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+    color: black;
+    font-size: 12pt;
+  }
+
+  #analysis-result {
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    max-width: 100% !important;
+    width: 100%;
+  }
+
+  .prose {
+    max-width: 100% !important;
+  }
+
+  a {
+    text-decoration: underline;
+    color: black;
+  }
+}

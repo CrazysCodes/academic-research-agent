@@ -1,19 +1,29 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Plus, Trash2 } from "lucide-react"
+import { Download, FileText, Plus, Trash2 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
 import { AgentProgress } from "@/components/analyze/AgentProgress"
+import { MermaidDiagram } from "@/components/analyze/MermaidDiagram"
 import { ChatInput } from "@/components/chat/ChatInput"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
-import { deleteAnalysis, getAnalysis, listAnalyses, streamAnalyze, streamRefineAnalysis } from "@/lib/api"
+import {
+  deleteAnalysis,
+  generateDiagram,
+  getAnalysis,
+  getExportMarkdownUrl,
+  listAnalyses,
+  streamAnalyze,
+  streamDraftSection,
+  streamRefineAnalysis,
+} from "@/lib/api"
 import { useAppStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import type { AgentNodeName, Analysis, ChatMessage, NodeOutputData, NodeStep } from "@/types"
+import type { AgentNodeName, Analysis, ChatMessage, DiagramType, NodeOutputData, NodeStep, SectionType } from "@/types"
 
 export default function AnalyzePage() {
   const { papers, selectedPaperIds, togglePaper, setSelectedPaperIds } = useAppStore()
@@ -32,9 +42,14 @@ export default function AnalyzePage() {
   const [refining, setRefining] = useState(false)
   const [refinementStreaming, setRefinementStreaming] = useState("")
 
+  // 图表
+  const [diagramCode, setDiagramCode] = useState("")
+  const [diagramLoading, setDiagramLoading] = useState(false)
+  const [diagramError, setDiagramError] = useState("")
+
   const readyPapers = papers.filter((p) => p.status === "ready")
   const canStart = query.trim().length > 0 && selectedPaperIds.length > 0 && !isRunning
-  const hasResult = !!(result || isRunning)  // 有结果或正在运行时隐藏输入区
+  const hasResult = !!(result || isRunning)
 
   // 加载历史列表
   useEffect(() => {
@@ -49,13 +64,11 @@ export default function AnalyzePage() {
       setQuery(a.query)
       setResult(a.result)
       setError("")
-      // 恢复选中的文献
+      setDiagramCode("")
       setSelectedPaperIds(a.paper_ids ?? [])
-      // 恢复优化对话记录
       setRefinementMessages(
         (a.refinements ?? []).map((r: ChatMessage) => ({ role: r.role, content: r.content }))
       )
-      // 从 node_outputs 重建 nodeSteps
       if (a.node_outputs) {
         const steps: NodeStep[] = []
         const nodeOrder: AgentNodeName[] = ["planner", "retriever", "writer", "reviewer"]
@@ -97,6 +110,8 @@ export default function AnalyzePage() {
     setNodeSteps([])
     setError("")
     setRefinementMessages([])
+    setDiagramCode("")
+    setDiagramError("")
   }
 
   async function handleRefine(instruction: string) {
@@ -134,6 +149,8 @@ export default function AnalyzePage() {
     setNodeSteps([])
     setActiveId(null)
     setRefinementMessages([])
+    setDiagramCode("")
+    setDiagramError("")
 
     try {
       const analysisId = await streamAnalyze(
@@ -156,7 +173,6 @@ export default function AnalyzePage() {
           })
         },
       )
-      // 刷新历史列表
       if (analysisId) {
         setActiveId(analysisId)
         listAnalyses().then(setHistory).catch(() => {})
@@ -168,10 +184,56 @@ export default function AnalyzePage() {
     }
   }
 
+  // ── 图表生成 ──
+  async function handleGenerateDiagram(type: DiagramType) {
+    if (!activeId || diagramLoading) return
+    setDiagramLoading(true)
+    setDiagramError("")
+    setDiagramCode("")
+    try {
+      const res = await generateDiagram(activeId, type)
+      setDiagramCode(res.mermaid_code)
+    } catch (e) {
+      setDiagramError(e instanceof Error ? e.message : "图表生成失败")
+    } finally {
+      setDiagramLoading(false)
+    }
+  }
+
+  // ── 章节草稿 ──
+  async function handleDraftSection(sectionType: SectionType) {
+    if (!activeId || refining) return
+    const sectionLabels: Record<SectionType, string> = {
+      abstract: "摘要",
+      introduction: "引言",
+      related_work: "相关工作",
+    }
+    const label = sectionLabels[sectionType]
+    setRefining(true)
+    setError("")
+    setRefinementMessages((prev) => [...prev, { role: "user", content: `生成${label}章节草稿` }])
+
+    let draft = ""
+    setRefinementStreaming("")
+
+    try {
+      await streamDraftSection(activeId, sectionType, 500, (chunk) => {
+        draft += chunk
+        setRefinementStreaming(draft)
+      })
+      setRefinementMessages((prev) => [...prev, { role: "assistant", content: draft }])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "草稿生成失败")
+    } finally {
+      setRefinementStreaming("")
+      setRefining(false)
+    }
+  }
+
   return (
-    <div className="flex h-[calc(100vh-3.5rem)]">
+    <div className="flex h-[calc(100vh-3.5rem)] print:h-auto print:block">
       {/* ── 左侧：历史侧边栏 ── */}
-      <aside className="hidden md:flex w-60 shrink-0 flex-col border-r bg-muted/30">
+      <aside className="hidden md:flex w-60 shrink-0 flex-col border-r bg-muted/30 print:hidden">
         <div className="flex items-center justify-between px-3 py-3 border-b">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             分析历史
@@ -220,7 +282,7 @@ export default function AnalyzePage() {
       {/* ── 右侧：主内容区 ── */}
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-4xl px-4 py-8 space-y-6">
-          <div>
+          <div className="print:hidden">
             <h1 className="text-2xl font-bold">多文档分析</h1>
             <p className="text-sm text-muted-foreground mt-1">
               由 LangGraph 多 Agent 驱动：规划 → 检索 → 撰写 → 评审
@@ -272,7 +334,6 @@ export default function AnalyzePage() {
                 className="min-h-[100px] resize-none"
                 disabled={isRunning}
                 onKeyDown={(e) => {
-                  // isComposing=true 表示中文输入法正在组合字符，Enter 是确认候选词而非提交
                   if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault()
                     handleAnalyze()
@@ -286,11 +347,38 @@ export default function AnalyzePage() {
             </>
           )}
 
-          {/* 结果模式下显示查询摘要 + 可编辑的文献选择 */}
+          {/* 结果模式下显示查询摘要 */}
           {hasResult && (
             <div className="rounded-lg border bg-muted/30 px-4 py-3 space-y-2">
-              <p className="text-sm font-medium">{query}</p>
-              {/* 文献 pill：已选的高亮显示，所有就绪文献都可点击切换 */}
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium flex-1">{query}</p>
+                {/* 导出按钮 */}
+                {activeId && !isRunning && (
+                  <div className="flex gap-1.5 shrink-0 print:hidden">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => window.open(getExportMarkdownUrl(activeId), "_blank")}
+                      title="导出 Markdown"
+                    >
+                      <FileText className="h-3 w-3" />
+                      Markdown
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => window.print()}
+                      title="导出 PDF（打印）"
+                    >
+                      <Download className="h-3 w-3" />
+                      PDF
+                    </Button>
+                  </div>
+                )}
+              </div>
+              {/* 文献 pill */}
               {readyPapers.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {readyPapers.map((p) => {
@@ -324,24 +412,81 @@ export default function AnalyzePage() {
 
           {/* 错误提示 */}
           {error && (
-            <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+            <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2 print:hidden">
               {error}
             </p>
           )}
 
           {/* 分析结果 */}
           {result && (
-            <div className="border rounded-lg p-6 bg-card prose prose-sm max-w-none dark:prose-invert">
+            <div
+              id="analysis-result"
+              className="border rounded-lg p-6 bg-card prose prose-sm max-w-none dark:prose-invert"
+            >
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {refinementStreaming || result}
               </ReactMarkdown>
             </div>
           )}
 
+          {/* 图表生成区域 */}
+          {result && !isRunning && activeId && (
+            <div className="space-y-3 border rounded-lg p-4 print:hidden">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">生成图表</h3>
+                {diagramLoading && (
+                  <span className="text-xs text-muted-foreground animate-pulse">生成中...</span>
+                )}
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {(["relationship", "flowchart", "timeline"] as DiagramType[]).map((type) => {
+                  const labels = { relationship: "关系图", flowchart: "流程图", timeline: "时间线" }
+                  return (
+                    <Button
+                      key={type}
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      disabled={diagramLoading}
+                      onClick={() => handleGenerateDiagram(type)}
+                    >
+                      {labels[type]}
+                    </Button>
+                  )
+                })}
+              </div>
+              {diagramError && (
+                <p className="text-xs text-destructive">{diagramError}</p>
+              )}
+              {diagramCode && <MermaidDiagram code={diagramCode} />}
+            </div>
+          )}
+
           {/* 对话式优化区域 */}
           {result && !isRunning && activeId && (
-            <div className="space-y-4 border-t pt-4">
-              <h3 className="text-sm font-semibold text-muted-foreground">对话优化</h3>
+            <div className="space-y-4 border-t pt-4 print:hidden">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-muted-foreground">对话优化</h3>
+                {/* 章节草稿快捷按钮 */}
+                <div className="flex gap-1.5">
+                  <span className="text-xs text-muted-foreground self-center">生成：</span>
+                  {(["abstract", "introduction", "related_work"] as SectionType[]).map((type) => {
+                    const labels = { abstract: "摘要", introduction: "引言", related_work: "相关工作" }
+                    return (
+                      <Button
+                        key={type}
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs px-2"
+                        disabled={refining}
+                        onClick={() => handleDraftSection(type)}
+                      >
+                        {labels[type]}
+                      </Button>
+                    )
+                  })}
+                </div>
+              </div>
 
               {refinementMessages.length > 0 && (
                 <div className="space-y-2">
@@ -356,14 +501,33 @@ export default function AnalyzePage() {
                       <span className="text-xs text-muted-foreground block mb-0.5">
                         {msg.role === "user" ? "你" : "AI"}
                       </span>
-                      {msg.content}
+                      {msg.role === "assistant" ? (
+                        <div className="prose prose-sm max-w-none dark:prose-invert">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        msg.content
+                      )}
                     </div>
                   ))}
                 </div>
               )}
 
               {refining && (
-                <p className="text-xs text-muted-foreground animate-pulse">正在更新报告...</p>
+                <div className="text-sm rounded-lg px-3 py-2 bg-primary/5 mr-8">
+                  <span className="text-xs text-muted-foreground block mb-0.5">AI</span>
+                  {refinementStreaming ? (
+                    <div className="prose prose-sm max-w-none dark:prose-invert">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {refinementStreaming}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground animate-pulse">正在生成...</p>
+                  )}
+                </div>
               )}
 
               <ChatInput
