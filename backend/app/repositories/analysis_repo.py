@@ -54,6 +54,25 @@ async def get(db: AsyncSession, analysis_id: str) -> AnalysisORM | None:
     return result.scalar_one_or_none()
 
 
+async def append_refinement(
+    db: AsyncSession,
+    analysis_id: str,
+    new_result: str,
+    entries: list[dict],
+) -> AnalysisORM | None:
+    """Update the analysis result and append refinement entries."""
+    row = await db.get(AnalysisORM, analysis_id)
+    if not row:
+        return None
+    row.result = new_result
+    existing = list(row.refinements or [])
+    existing.extend(entries)
+    row.refinements = existing
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
 async def delete(db: AsyncSession, analysis_id: str) -> bool:
     row = await db.get(AnalysisORM, analysis_id)
     if not row:

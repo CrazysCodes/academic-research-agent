@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils"
 
 const NAV_LINKS = [
   { href: "/chat", label: "问答" },
-  { href: "/papers", label: "文献库" },
   { href: "/analyze", label: "分析" },
+  { href: "/papers", label: "文献库" },
 ]
 
 const SETTINGS_LINK = { href: "/settings", label: "设置" }

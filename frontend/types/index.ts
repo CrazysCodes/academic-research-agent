@@ -109,6 +109,7 @@ export interface Analysis {
   score: number
   iterations: number
   node_outputs: Record<string, NodeOutputData>
+  refinements: ChatMessage[]
   created_at: string
 }
 

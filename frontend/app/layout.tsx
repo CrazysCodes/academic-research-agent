@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import Link from "next/link"
+import { AppInitializer } from "@/components/layout/AppInitializer"
 import { NavLinks } from "@/components/layout/NavLinks"
 import "./globals.css"
 
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <NavLinks />
           </nav>
         </header>
+        <AppInitializer />
         <main>{children}</main>
       </body>
     </html>

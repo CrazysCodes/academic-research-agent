@@ -11,3 +11,7 @@ class AnalyzeRequest(BaseModel):
     paper_ids: list[str]
     query: str
     mode: Literal["single", "compare"] = "single"
+
+
+class RefineRequest(BaseModel):
+    instruction: str

@@ -1,9 +1,16 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+
+# 配置全局日志级别，确保 app.* 的 INFO 日志可见
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 from app.db.database import init_db
 from app.api.routes import chat, analyze, conversations
 from app.api.routes import papers, settings as settings_routes

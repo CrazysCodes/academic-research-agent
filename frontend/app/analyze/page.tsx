@@ -6,16 +6,17 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
 import { AgentProgress } from "@/components/analyze/AgentProgress"
+import { ChatInput } from "@/components/chat/ChatInput"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
-import { deleteAnalysis, getAnalysis, listAnalyses, streamAnalyze } from "@/lib/api"
+import { deleteAnalysis, getAnalysis, listAnalyses, streamAnalyze, streamRefineAnalysis } from "@/lib/api"
 import { useAppStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import type { AgentNodeName, Analysis, NodeOutputData, NodeStep } from "@/types"
+import type { AgentNodeName, Analysis, ChatMessage, NodeOutputData, NodeStep } from "@/types"
 
 export default function AnalyzePage() {
-  const { papers, selectedPaperIds, togglePaper } = useAppStore()
+  const { papers, selectedPaperIds, togglePaper, setSelectedPaperIds } = useAppStore()
   const [query, setQuery] = useState("")
   const [isRunning, setIsRunning] = useState(false)
   const [nodeSteps, setNodeSteps] = useState<NodeStep[]>([])
@@ -26,8 +27,14 @@ export default function AnalyzePage() {
   const [history, setHistory] = useState<Analysis[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
 
+  // 对话式优化
+  const [refinementMessages, setRefinementMessages] = useState<ChatMessage[]>([])
+  const [refining, setRefining] = useState(false)
+  const [refinementStreaming, setRefinementStreaming] = useState("")
+
   const readyPapers = papers.filter((p) => p.status === "ready")
   const canStart = query.trim().length > 0 && selectedPaperIds.length > 0 && !isRunning
+  const hasResult = !!(result || isRunning)  // 有结果或正在运行时隐藏输入区
 
   // 加载历史列表
   useEffect(() => {
@@ -42,6 +49,12 @@ export default function AnalyzePage() {
       setQuery(a.query)
       setResult(a.result)
       setError("")
+      // 恢复选中的文献
+      setSelectedPaperIds(a.paper_ids ?? [])
+      // 恢复优化对话记录
+      setRefinementMessages(
+        (a.refinements ?? []).map((r: ChatMessage) => ({ role: r.role, content: r.content }))
+      )
       // 从 node_outputs 重建 nodeSteps
       if (a.node_outputs) {
         const steps: NodeStep[] = []
@@ -83,6 +96,34 @@ export default function AnalyzePage() {
     setResult("")
     setNodeSteps([])
     setError("")
+    setRefinementMessages([])
+  }
+
+  async function handleRefine(instruction: string) {
+    if (!activeId || refining) return
+    setRefining(true)
+    setError("")
+    setRefinementMessages((prev) => [...prev, { role: "user", content: instruction }])
+
+    let newResult = ""
+    setRefinementStreaming("")
+
+    try {
+      await streamRefineAnalysis(activeId, instruction, (chunk) => {
+        newResult += chunk
+        setRefinementStreaming(newResult)
+      })
+      setResult(newResult)
+      setRefinementMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "已根据您的要求更新报告。" },
+      ])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "优化失败，请重试")
+    } finally {
+      setRefinementStreaming("")
+      setRefining(false)
+    }
   }
 
   async function handleAnalyze() {
@@ -92,6 +133,7 @@ export default function AnalyzePage() {
     setError("")
     setNodeSteps([])
     setActiveId(null)
+    setRefinementMessages([])
 
     try {
       const analysisId = await streamAnalyze(
@@ -185,60 +227,95 @@ export default function AnalyzePage() {
             </p>
           </div>
 
-          {/* 文献选择 */}
-          <div className="space-y-2">
-            <p className="text-sm font-medium">
-              选择文献
-              <span className="ml-1.5 text-muted-foreground">
-                （{selectedPaperIds.length} 已选，至少选 1 篇）
-              </span>
-            </p>
-            {readyPapers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                请先在文献库上传并处理论文
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {readyPapers.map((paper) => {
-                  const selected = selectedPaperIds.includes(paper.id)
-                  return (
-                    <button
-                      key={paper.id}
-                      onClick={() => togglePaper(paper.id)}
-                      disabled={isRunning}
-                      className={cn(
-                        "text-xs px-3 py-1.5 rounded-full border transition-colors",
-                        selected
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "border-border hover:border-primary/50 text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {paper.title}
-                    </button>
-                  )
-                })}
+          {/* 文献选择 + 问题输入 + 开始按钮（有结果后隐藏） */}
+          {!hasResult && (
+            <>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">
+                  选择文献
+                  <span className="ml-1.5 text-muted-foreground">
+                    （{selectedPaperIds.length} 已选，至少选 1 篇）
+                  </span>
+                </p>
+                {readyPapers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    请先在文献库上传并处理论文
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {readyPapers.map((paper) => {
+                      const selected = selectedPaperIds.includes(paper.id)
+                      return (
+                        <button
+                          key={paper.id}
+                          onClick={() => togglePaper(paper.id)}
+                          disabled={isRunning}
+                          className={cn(
+                            "text-xs px-3 py-1.5 rounded-full border transition-colors",
+                            selected
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "border-border hover:border-primary/50 text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {paper.title}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* 问题输入 */}
-          <Textarea
-            placeholder="输入研究问题，例如：比较这些论文在方法论上的异同..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="min-h-[100px] resize-none"
-            disabled={isRunning}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault()
-                handleAnalyze()
-              }
-            }}
-          />
+              <Textarea
+                placeholder="输入研究问题，例如：比较这些论文在方法论上的异同..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="min-h-[100px] resize-none"
+                disabled={isRunning}
+                onKeyDown={(e) => {
+                  // isComposing=true 表示中文输入法正在组合字符，Enter 是确认候选词而非提交
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault()
+                    handleAnalyze()
+                  }
+                }}
+              />
 
-          <Button onClick={handleAnalyze} disabled={!canStart} className="w-full">
-            {isRunning ? "Agent 分析中..." : "开始分析"}
-          </Button>
+              <Button onClick={handleAnalyze} disabled={!canStart} className="w-full">
+                {isRunning ? "Agent 分析中..." : "开始分析"}
+              </Button>
+            </>
+          )}
+
+          {/* 结果模式下显示查询摘要 + 可编辑的文献选择 */}
+          {hasResult && (
+            <div className="rounded-lg border bg-muted/30 px-4 py-3 space-y-2">
+              <p className="text-sm font-medium">{query}</p>
+              {/* 文献 pill：已选的高亮显示，所有就绪文献都可点击切换 */}
+              {readyPapers.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {readyPapers.map((p) => {
+                    const selected = selectedPaperIds.includes(p.id)
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => togglePaper(p.id)}
+                        disabled={isRunning || refining}
+                        title={selected ? "点击取消选择" : "点击添加此文献"}
+                        className={cn(
+                          "text-[11px] px-2 py-0.5 rounded-full border transition-colors",
+                          selected
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                        )}
+                      >
+                        {p.title}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Agent 执行进度（时间线） */}
           {nodeSteps.length > 0 && (
@@ -255,7 +332,45 @@ export default function AnalyzePage() {
           {/* 分析结果 */}
           {result && (
             <div className="border rounded-lg p-6 bg-card prose prose-sm max-w-none dark:prose-invert">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{result}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {refinementStreaming || result}
+              </ReactMarkdown>
+            </div>
+          )}
+
+          {/* 对话式优化区域 */}
+          {result && !isRunning && activeId && (
+            <div className="space-y-4 border-t pt-4">
+              <h3 className="text-sm font-semibold text-muted-foreground">对话优化</h3>
+
+              {refinementMessages.length > 0 && (
+                <div className="space-y-2">
+                  {refinementMessages.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        "text-sm rounded-lg px-3 py-2",
+                        msg.role === "user" ? "bg-muted ml-8" : "bg-primary/5 mr-8",
+                      )}
+                    >
+                      <span className="text-xs text-muted-foreground block mb-0.5">
+                        {msg.role === "user" ? "你" : "AI"}
+                      </span>
+                      {msg.content}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {refining && (
+                <p className="text-xs text-muted-foreground animate-pulse">正在更新报告...</p>
+              )}
+
+              <ChatInput
+                onSend={handleRefine}
+                disabled={refining}
+                placeholder="输入优化指令，例如：请补充方法论对比的细节…"
+              />
             </div>
           )}
         </div>

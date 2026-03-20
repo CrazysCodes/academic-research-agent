@@ -90,6 +90,7 @@ class AnalysisORM(Base):
     score: Mapped[int] = mapped_column(Integer, default=0)
     iterations: Mapped[int] = mapped_column(Integer, default=0)
     node_outputs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    refinements: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[str] = mapped_column(String, default=_now)
 
     paper_links: Mapped[list["AnalysisPaperORM"]] = relationship(

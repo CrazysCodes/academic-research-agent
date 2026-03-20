@@ -20,6 +20,7 @@ interface AppState {
 
   // Selection
   togglePaper: (id: string) => void
+  setSelectedPaperIds: (ids: string[]) => void
   clearSelection: () => void
 
   // Conversations
@@ -57,6 +58,7 @@ export const useAppStore = create<AppState>((set) => ({
         ? s.selectedPaperIds.filter((p) => p !== id)
         : [...s.selectedPaperIds, id],
     })),
+  setSelectedPaperIds: (ids) => set({ selectedPaperIds: ids }),
   clearSelection: () => set({ selectedPaperIds: [] }),
 
   setConversations: (conversations) => set({ conversations }),

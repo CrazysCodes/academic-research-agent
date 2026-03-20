@@ -21,7 +21,9 @@ export function ChatInput({ onSend, disabled, placeholder = "输入问题…" }:
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // isComposing=true 表示输入法正在组合字符（中文候选词阶段），
+    // 此时 Enter 是确认候选词而非发送，不应触发 handleSend
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       handleSend()
     }

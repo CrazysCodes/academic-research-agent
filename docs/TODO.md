@@ -55,7 +55,7 @@
 - [x] `components/papers/UploadDropzone.tsx` — 拖拽 + 点击上传，50MB 限制
 - [x] `components/papers/PaperCard.tsx` — 状态展示 + 详情入口（外链图标）
 - [x] `components/chat/MessageList.tsx` — 美化消息气泡（AI/用户 avatar）+ 复制按钮 + 引导 empty state
-- [x] `components/chat/ChatInput.tsx` — Enter 发送，Shift+Enter 换行
+- [x] `components/chat/ChatInput.tsx` — Enter 发送，Shift+Enter 换行，IME 中文输入法兼容
 - [x] `components/layout/NavLinks.tsx` — 激活路由高亮（client 组件）
 - [x] 无论文对话（通用 LLM 模式，不走 RAG，顶部显示模式提示）
 
@@ -108,15 +108,15 @@ npm run dev
 
 ## Phase 2 — LangGraph 多 Agent 分析 ✅ 完成
 
-> 目标：多文档对比 + LangGraph Agent 编排 + 分析历史持久化
+> 目标：多文档对比 + LangGraph Agent 编排 + 分析历史持久化 + 对话式优化报告
 
 ### Agent 图设计（LangGraph StateGraph）
 
 ```
 用户输入
-  → PlannerNode    拆解问题为 3~5 个子查询
-  → RetrieverNode  并发 RAG 检索，聚合 context chunks
-  → WriterNode     生成结构化报告（摘要 / 对比 / 结论各节）
+  → PlannerNode    拆解问题为 3~5 个子查询（Function Calling 强约束输出 JSON）
+  → RetrieverNode  全文模式：预加载论文全文（≤60K字符），跳过 RAG；降级时走向量检索
+  → WriterNode     生成结构化报告 + 可选 Tavily Web Search 补充外部知识
   → ReviewerNode   质量评分(0-10)，< 7分打回 WriterNode 重写（最多2轮）
   → Done           持久化到 DB + 推送最终报告
 ```
@@ -124,20 +124,23 @@ npm run dev
 ### 后端
 
 - [x] `app/core/state.py` — ResearchState TypedDict（query, paper_ids, sub_queries, context_chunks, draft, score, feedback, iterations）
-- [x] `app/core/nodes/planner.py` — PlannerNode：LLM 将问题拆解为子查询列表
-- [x] `app/core/nodes/retriever.py` — RetrieverNode：并发调用 rag_service.retrieve()，合并去重
-- [x] `app/core/nodes/writer.py` — WriterNode：按模板生成 Markdown 结构化报告，支持修订
-- [x] `app/core/nodes/reviewer.py` — ReviewerNode：评分 + Tavily 外部搜索补充 + 条件打回
+- [x] `app/core/nodes/planner.py` — Function Calling 强约束 → parse_json_markdown fallback → retry with error feedback
+- [x] `app/core/nodes/retriever.py` — 全文模式透传（context_chunks 已预填充时跳过 RAG）；降级 RAG 兜底
+- [x] `app/core/nodes/writer.py` — 初次写作 + Tavily Web Search 补充；修订模式接收 reviewer feedback
+- [x] `app/core/nodes/reviewer.py` — Function Calling 强约束评分 → parse_json_markdown fallback → retry
 - [x] `app/core/graph.py` — StateGraph 组装，条件边（score < 7 → writer，否则 → done）
 - [x] `app/core/tools/web_search.py` — Tavily 搜索 Tool（可选，需 TAVILY_API_KEY）
+- [x] `app/core/llm.py` — `create_structured_llm()` 工厂，封装 `with_structured_output(method="function_calling")`
 - [x] `app/config.py` 新增 `tavily_api_key`
+- [x] `app/main.py` — `logging.basicConfig(level=INFO)` 全局日志配置
+- [x] 全文模式（`_stream_agent`）：轮询交替加载各论文全文块，限制 60K 字符防超出上下文窗口
 - [x] `/api/analyze` 升级：LangGraph `astream_events` → SSE（node / node_output / delta / done）
-- [x] `app/db/models.py` — AnalysisORM + AnalysisPaperORM（分析历史持久化）
-- [x] `app/repositories/analysis_repo.py` — 分析历史 CRUD
+- [x] `app/db/models.py` — AnalysisORM（含 `refinements` JSON 列）+ AnalysisPaperORM
+- [x] `app/repositories/analysis_repo.py` — 分析历史 CRUD + `append_refinement()`
+- [x] `POST /api/analyze/{id}/refine` — 报告对话式优化端点（全文模式 + SSE 流式输出）
 - [x] `GET /api/analyze/history` — 历史列表
-- [x] `GET /api/analyze/history/{id}` — 历史详情
+- [x] `GET /api/analyze/history/{id}` — 历史详情（含 refinements 记录）
 - [x] `DELETE /api/analyze/history/{id}` — 删除历史
-- [x] Embedding / Splitter 配置指纹检测，设置页改模型后无需重启
 
 ### SSE 事件协议
 
@@ -150,23 +153,54 @@ npm run dev
 
 ### 前端
 
-- [x] `app/analyze/page.tsx` — 分析页：文献选择 + 问题输入 + 历史侧边栏（加载/删除/新建）
+- [x] `app/analyze/page.tsx` — 分析页完整交互：
+  - 分析历史侧边栏（加载/删除/新建）
+  - 首次分析后自动隐藏输入表单，显示查询摘要卡片
+  - 结果区可切换论文选择 pill（已选高亮 + 点击切换）
+  - 对话式优化区（ChatInput + 消息气泡 + 流式更新）
+  - 加载历史时恢复选中论文 + 恢复优化对话记录
+  - Textarea Enter 键 IME 中文输入法兼容
 - [x] `components/analyze/AgentProgress.tsx` — 垂直时间线 + 可折叠节点详情面板
-- [x] `components/layout/NavLinks.tsx` — Tab 顺序调整：问答 → 文献库 → 分析
-- [x] `lib/api.ts` — `streamAnalyze()` 支持 node/node_output/delta/done 事件 + 历史 API
-- [x] `types/index.ts` — AgentSSEEvent、NodeStep、Analysis 等类型
-- [x] 问答页就地选择文献（pill 选择器，无选中即通用问答）
-- [x] 文献库页仅做上传/查看/删除，移除选择功能
+- [x] `components/layout/NavLinks.tsx` — Tab 顺序：问答 → 分析 → 文献库
+- [x] `components/layout/AppInitializer.tsx` — 全局初始化，应用启动时自动加载论文列表
+- [x] `app/layout.tsx` — 挂载 AppInitializer，确保各页面均可见已上传文献
+- [x] `lib/api.ts` — `streamAnalyze()` + `streamRefineAnalysis()` + 分析历史 API
+- [x] `lib/store.ts` — 新增 `setSelectedPaperIds()` action
+- [x] `types/index.ts` — AgentSSEEvent、NodeStep、Analysis（含 refinements）等类型
+- [x] 问答页文献选择 pill 移至输入框上方（底部 footer 内）
 
 ---
 
-## Phase 3 — 写作辅助
+## Phase 3 — 报告增强与导出 🚧 规划中
 
-- [ ] `app/core/tools/latex_writer.py` — LaTeX 片段生成
-- [ ] `app/core/tools/mermaid_gen.py` — Mermaid 图生成
-- [ ] `POST /api/export/latex` 接口
-- [ ] `POST /api/export/mermaid` 接口
-- [ ] 前端导出按钮 + 预览
+> 目标：让分析报告更专业、可导出，引入图表可视化和写作辅助，提升成果产出质量
+
+### 3.1 报告导出
+
+- [ ] `POST /api/analyze/{id}/export/markdown` — 下载 Markdown 文件
+- [ ] `POST /api/analyze/{id}/export/pdf` — 服务端 Markdown → PDF（`weasyprint` 或 `playwright`）
+- [ ] 前端分析页导出按钮（Markdown / PDF 两种格式）
+- [ ] 导出报告包含：查询问题、选中文献列表、Agent 执行摘要、正文、优化历史
+
+### 3.2 Mermaid 图表生成
+
+- [ ] `app/core/nodes/diagram_gen.py` — DiagramNode：LLM 从报告内容生成 Mermaid 关系图/流程图
+- [ ] `POST /api/analyze/{id}/diagram` — 触发图表生成，返回 Mermaid 代码
+- [ ] 前端报告页内嵌 Mermaid 渲染（`mermaid` npm 包或 `react-mermaid2`）
+- [ ] 支持图表类型：论文关系图（graph LR）、方法流程图（flowchart）、时间线（timeline）
+
+### 3.3 引用格式化
+
+- [ ] `POST /api/papers/{id}/citation` — 生成指定格式引用（APA / MLA / IEEE / BibTeX）
+- [ ] LLM 从论文元数据（标题、作者、年份等）+ Tavily 搜索补全缺失字段
+- [ ] 前端文献库页每篇论文增加"复制引用"下拉按钮
+
+### 3.4 写作草稿辅助
+
+- [ ] `POST /api/analyze/{id}/draft-section` — 基于报告生成指定章节草稿（摘要/引言/相关工作）
+- [ ] 请求参数：`section_type`（abstract/introduction/related_work）、`target_length`（字数目标）
+- [ ] 前端对话优化区新增"生成章节"快捷操作按钮
+- [ ] 草稿输出同样支持流式渲染
 
 ---
 
@@ -226,3 +260,6 @@ npm run dev
 | 2026-03 | RAG + 长上下文互补策略 | RAG 做粗筛(成本低、引用溯源)，长上下文做精读(深度推理) |
 | 2026-03 | SQLAlchemy async + asyncpg | 与 FastAPI async 生态一致，PostgreSQL 异步驱动性能好 |
 | 2026-03 | Python 先行，Java 后跟 | LangGraph 无 Java 对等品；demo 完成后用 Spring AI 1:1 重写供 Java 岗面试 |
+| 2026-03 | 分析用全文模式而非 RAG | RAG 分块太小（100+块/篇），LLM 获取信息严重不足；全文模式限 60K 字符均衡取块 |
+| 2026-03 | LLM 结构化输出用 Function Calling | `with_structured_output(method="function_calling")` 代理层强约束，比 prompt JSON 指令可靠 10 倍 |
+| 2026-03 | 解析兜底用 parse_json_markdown | LangChain 内置，自动剥 ```json 围栏，比手写正则更健壮；配合 retry 构成三层防线 |

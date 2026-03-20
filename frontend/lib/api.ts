@@ -193,3 +193,41 @@ export async function getAnalysis(id: string): Promise<Analysis> {
 export async function deleteAnalysis(id: string): Promise<void> {
   await request(`/api/analyze/history/${id}`, { method: "DELETE" })
 }
+
+// ---------- Analysis Refinement (SSE) ----------
+
+export async function streamRefineAnalysis(
+  analysisId: string,
+  instruction: string,
+  onChunk: (text: string) => void,
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/analyze/${analysisId}/refine`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ instruction }),
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail ?? `HTTP ${res.status}`)
+  }
+
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    const lines = decoder.decode(value).split("\n").filter((l) => l.startsWith("data: "))
+    for (const line of lines) {
+      const raw = line.slice(6)
+      if (raw === "[DONE]") return
+      try {
+        const data = JSON.parse(raw)
+        if (data.delta) onChunk(data.delta)
+      } catch {
+        // 忽略格式错误的 SSE 行
+      }
+    }
+  }
+}
