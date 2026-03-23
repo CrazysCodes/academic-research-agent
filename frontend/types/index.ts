@@ -91,6 +91,22 @@ export interface NodeStep {
 
 export type AgentSSEEvent = AgentNodeEvent | AgentDeltaEvent | AgentNodeOutputEvent | AgentDoneEvent
 
+// ---------- 图表 & 引用 & 草稿 ----------
+
+export type DiagramType = "relationship" | "flowchart" | "timeline"
+
+export interface DiagramResponse {
+  mermaid_code: string
+}
+
+export type CitationFormat = "apa" | "mla" | "ieee" | "bibtex"
+
+export interface CitationResponse {
+  citation: string
+}
+
+export type SectionType = "abstract" | "introduction" | "related_work"
+
 export interface LLMSettings {
   llm_model: string
   openai_api_key: string

@@ -15,3 +15,16 @@ class AnalyzeRequest(BaseModel):
 
 class RefineRequest(BaseModel):
     instruction: str
+
+
+class DiagramRequest(BaseModel):
+    diagram_type: Literal["relationship", "flowchart", "timeline"]
+
+
+class CitationRequest(BaseModel):
+    format: Literal["apa", "mla", "ieee", "bibtex"]
+
+
+class DraftSectionRequest(BaseModel):
+    section_type: Literal["abstract", "introduction", "related_work"]
+    target_length: int = 500

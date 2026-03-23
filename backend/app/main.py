@@ -12,7 +12,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 from app.db.database import init_db
-from app.api.routes import chat, analyze, conversations
+from app.api.routes import chat, analyze, conversations, export, diagram, citation, draft
 from app.api.routes import papers, settings as settings_routes
 
 
@@ -43,6 +43,10 @@ app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(analyze.router, prefix="/api/analyze", tags=["analyze"])
 app.include_router(conversations.router, prefix="/api/conversations", tags=["conversations"])
 app.include_router(settings_routes.router, prefix="/api/settings", tags=["settings"])
+app.include_router(export.router, prefix="/api/analyze", tags=["export"])
+app.include_router(diagram.router, prefix="/api/analyze", tags=["diagram"])
+app.include_router(citation.router, prefix="/api/papers", tags=["citation"])
+app.include_router(draft.router, prefix="/api/analyze", tags=["draft"])
 
 
 @app.get("/health")
