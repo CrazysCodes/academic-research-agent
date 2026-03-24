@@ -163,20 +163,39 @@ class PaperInfo(BaseModel):
 ### 5.1 多 Agent 工作流
 
 ```
-用户请求
+用户请求（Query）
     │
     ▼
-ResearchAgent（检索规划）
-    │  检索到相关 chunks
+QueryRewriteNode（查询改写） ← Phase 3 新增
+    │  改写后的问题
     ▼
-WriterAgent（内容生成）
-    │  草稿
+PlannerNode（规划拆解）
+    │  3~5 个子查询
     ▼
-ReviewAgent（质量评审）
-    │  评审通过 / 反思循环
+RetrieverNode（检索）
+    │  全文模式（≤60K 字符）或 RAG 混合检索
+    ▼
+WriterNode（写作生成）
+    │  草稿 + 可选 Web Search 补充
+    ▼
+ReviewNode（质量评审）
+    │  评分 0-10，<7 打回 Writer 重写
     ▼
 最终响应（流式输出）
 ```
+
+### 5.2 Query Rewrite 的价值
+
+Query Rewrite 是生产级 RAG 的第一道优化。常见技术：
+
+| 技术 | 做法 | 适用场景 |
+|------|------|---------|
+| Query Expansion | 短问题扩展为完整问题 | "DETR效果" → "DETR模型在目标检测任务上的性能指标（mAP/FPS）如何？" |
+| HyDE | LLM 先猜答案，用猜测去检索 | 猜测答案中包含的关键词能更好命中相关片段 |
+| Step-back | 抽象化问题再检索 | 具体问题 → 通类问题 → 再回到具体 |
+| Sub-question | 拆成多个独立问题分别检索再合并 | 复杂多跳问题 |
+
+analyze 管线用 Query Expansion（改写成结构化分析问题）；chat 管线用 HyDE（改进召回率）。
 
 ### 5.2 LangGraph 状态定义
 
@@ -257,7 +276,34 @@ Qdrant 存储（collection per paper）
            → Rerank → Top-K chunks → LLM
 ```
 
-### 6.2 Qdrant Collection 设计
+### 6.2 混合检索（Hybrid Search）
+
+```
+用户 Query
+    ├── Dense 检索（Embedding → Qdrant 向量搜索）
+    └── Sparse 检索（BM25 关键词 → Qdrant 全文检索）
+           ↓
+    分数加权融合（RRF 或线性加权）
+           ↓
+    Cross-Encoder Re-ranker（top-20 → top-5）
+           ↓
+    精排后 Top-K → LLM
+```
+
+BM25 用 Qdrant 的 `match` 查询实现，无需额外服务。Re-ranker 用 `bge-reranker-base` 模型（本地或 API）。
+
+### 6.3 Citation Grounding
+
+LLM 生成回答时强制要求标注来源片段：
+
+```
+回答正文
+... DETR 采用 Transformer 架构 [Source: chunk_23, HF-D-FINE] ...
+
+前端渲染：点击引用跳转到原文片段高亮显示
+```
+
+实现方式：在 prompt 里要求引用 chunk_id，retriever 返回结果时附带上 chunk_id 和 paper_title。
 
 ```python
 # repositories/vector_repo.py
@@ -461,30 +507,57 @@ volumes:
 
 ## 10. 功能开发优先级
 
-### Phase 1 — 核心链路（2-3 周）
+> 完整 Phase 规划见 [TODO.md](./TODO.md)，以下为技术层面的架构演进总览。
 
-- [ ] Docker Compose 环境搭建（PostgreSQL + Qdrant + Redis）
-- [ ] FastAPI 基础框架 + 项目目录结构
-- [ ] PDF/Word 上传 → 2markdown 解析 → 分块 → Embedding → Qdrant 存储
-- [ ] 单文档 RAG 问答（`/chat` 接口 + 流式输出）
-- [ ] Next.js 基础 UI（文档上传 + 对话界面）
+### Phase 1 — 核心链路 ✅ 已完成
 
-### Phase 2 — Agent 功能（1-2 周）
+- [x] Docker Compose 环境搭建（PostgreSQL + Qdrant + Redis）
+- [x] FastAPI 基础框架 + 项目目录结构
+- [x] PDF/Word 上传 → 2markdown 解析 → 分块 → Embedding → Qdrant 存储
+- [x] 单文档 RAG 问答（`/chat` 接口 + 流式输出）
+- [x] Next.js 基础 UI（文档上传 + 对话界面）
 
-- [ ] LangGraph ResearchAgent + WriterAgent
-- [ ] 多文档对比分析（跨 collection 检索）
-- [ ] Web 搜索 Tool 集成（Tavily）
-- [ ] 前端多文档选择器 + 对比结果展示
+### Phase 2 — LangGraph 多 Agent ✅ 已完成
 
-### Phase 3 — Demo 功能（1 周）
+- [x] LangGraph ResearchAgent + WriterAgent + ReviewAgent
+- [x] 多文档对比分析（跨 collection 检索）
+- [x] Web 搜索 Tool 集成（Tavily）
+- [x] 前端多文档选择器 + 对比结果展示 + 分析历史持久化
 
-- [ ] LaTeX 辅助写作（WriterAgent → LaTeX 片段）
-- [ ] Mermaid 图生成 Tool
-- [ ] ReviewAgent 反思循环
+### Phase 3 — RAG 增强 + 报告导出 🚧 规划中
 
-### Phase 4 — 加分项（后续迭代）
+- [ ] Query Rewrite / Expansion（RAG 前查询改写）
+- [ ] Markdown / PDF 报告导出
+- [ ] Mermaid 图表生成
+- [ ] 引用格式化（APA / MLA / IEEE / BibTeX）
+- [ ] 写作草稿辅助（摘要 / 引言 / 相关工作章节生成）
 
-- [ ] MCP Server 暴露（供 Claude Desktop / Cursor 调用）
+### Phase 4 — RAG 生产级 + Memory 系统
+
+- [ ] 混合检索（BM25 + 向量检索融合）
+- [ ] Re-ranker（Cross-Encoder 精排 top-20 → top-5）
+- [ ] Citation Grounding（引用溯源，LLM 回答标注来源片段）
+- [ ] 跨会话 Memory（论文元数据 KB + 分析报告归档检索）
+- [ ] 会话摘要（长对话压缩防溢出）
+
+### Phase 5 — Tool 生态扩展 + 可观测性
+
+- [ ] MCP Server 暴露（Claude Desktop / Cursor 直接调用）
+- [ ] Code Interpreter（安全沙箱执行 Python）
+- [ ] 意图识别（单一对话入口，多意图并发路由）
+- [ ] 分布式追踪（LangSmith / OpenTelemetry + Token 统计 + 慢查询告警）
+
+### Phase 6 — Multi-Agent 协作 + 自动优化
+
+- [ ] Multi-Agent 路由（ResearchAgent / WritingAgent / SearchAgent 分工）
+- [ ] Agent Self-Improvement（用户反馈闭环 + RAG 质量评分）
+- [ ] 主动推送（arXiv 监控 + 新论文通知）
+
+### Phase 7 — 工程化与部署
+
+- [ ] Redis 缓存 Embedding 结果
+- [ ] CI/CD + Docker build 优化
+- [ ] 用户认证（JWT）
 - [ ] A2A 协议集成（Sub-Agent 微服务化）
 
 ---
@@ -506,12 +579,16 @@ volumes:
 
 ## 12. 面试价值点总结
 
-| 技术点 | 体现能力 |
-|--------|----------|
-| LangGraph 多 Agent 编排 | Agent 工程化设计，非简单 LLM 调用 |
-| Qdrant + 混合检索 RAG | 向量数据库使用，RAG 工程实践 |
-| FastAPI 分层架构 | 后端工程规范，类比 Java 体现迁移能力 |
-| 流式 SSE 输出 | 全栈联调能力，用户体验意识 |
-| MCP Server | 前沿 AI 生态认知（加分项） |
-| 2markdown 复用 | 工程复用意识，快速交付能力 |
-| Docker Compose | 完整项目可运行，不只是 demo |
+| 技术点 | 体现能力 | 级别 |
+|--------|----------|------|
+| LangGraph 多 Agent 编排（Planner/Retriever/Writer/Reviewer） | Agent 工程化设计，非简单 LLM 调用 | 核心亮点 |
+| Function Calling 结构化输出（三层解析防线） | 处理 LLM 不可靠输出的工程经验 | 核心亮点 |
+| 全文模式替代 RAG（60K 字符轮询取块） | 根据场景选择最优方案而非套用模板 | 核心亮点 |
+| Qdrant + 混合检索 RAG（BM25 + 向量 + Re-ranker） | 生产级 RAG 管线认知 | 进阶 |
+| Query Rewrite / HyDE / Sub-question | RAG 优化深度，认知领先初级候选人 | 进阶 |
+| Citation Grounding（引用溯源） | 学术场景领域理解，细节意识 | 进阶 |
+| 跨会话 Memory 系统 | 长期知识积累架构设计能力 | 进阶 |
+| FastAPI 分层架构 + async ORM | 后端工程规范，类比 Java 体现迁移能力 | 基础 |
+| 流式 SSE 输出 + 前端状态管理 | 全栈联调能力，用户体验意识 | 基础 |
+| MCP Server 暴露 | 前沿 AI 生态认知（加分项） | 加分 |
+| 2markdown 复用 + Docker Compose | 工程复用意识，完整项目可运行 | 基础 |

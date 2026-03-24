@@ -171,9 +171,20 @@ npm run dev
 
 ---
 
-## Phase 3 — 报告增强与导出 ✅ 完成
+## Phase 3 — RAG 增强 + 报告增强与导出 🚧 规划中
 
-> 目标：让分析报告更专业、可导出，引入图表可视化和写作辅助，提升成果产出质量
+> 目标：RAG 管线优化 + 让分析报告更专业可导出 + 引入图表和写作辅助
+
+### 3.0 RAG 管线增强
+
+> 当前：用户问题直接 embedding 检索，复杂/简短问题召回差。
+> 目标：Query Rewrite → 改写成高质量检索问题再检索。
+
+- [ ] `app/core/nodes/query_rewrite.py` — QueryRewriteNode：LLM 将用户原始问题改写成更适合检索的形式
+  - **analyze 管线**：改写成结构化分析问题（适合 Planner 多子查询）
+  - **chat 管线**：Query Expansion / HyDE 改进召回（短问题→完整问题，或用猜测答案辅助检索）
+- [ ] chat 管线：`POST /api/chat` 接入 QueryRewriteNode，rewrite 后再 RAG
+- [ ] analyze 管线：`_stream_agent` 入口处加 query rewrite，预处理后再进 PlannerNode
 
 ### 3.1 报告导出
 
@@ -199,13 +210,108 @@ npm run dev
 
 ---
 
-## Phase 4 — 加分项（后续迭代）
+## Phase 4 — RAG 生产级 + Memory 系统
 
-- [ ] MCP Server 暴露（`mcp_server.py`，供 Claude Desktop / Cursor 调用）
-- [ ] Redis 缓存 Embedding 结果（避免重复计算）
-- [ ] A2A 协议集成（Sub-Agent 微服务化）
+> 目标：把 RAG 从"玩具级"提升到"生产级"；加入跨会话长期记忆，实现真正的知识积累。
+> 核心认知：编排器（LangGraph）是通用基础设施，本阶段重点是强化 RAG 质量和 Memory 体系。
+
+### 4.1 混合检索（Hybrid Search）
+
+- [ ] `rag_service.retrieve()` 改造：BM25 关键词检索 + 向量检索双路并行
+- [ ] 分数加权融合（RRF 或线性加权），取 top-k
+- [ ] 降级策略：某一路失败时另一路兜底
+
+### 4.2 Re-ranker（Cross-Encoder 精排）
+
+- [ ] 向量检索 top-20 → Cross-Encoder（bge-reranker-base）重排 → top-5
+- [ ] reranker 服务可独立部署（本地模型或 API）
+- [ ] 配置开关，可按需开启/关闭
+
+### 4.3 Citation Grounding（引用溯源）
+
+- [ ] LLM 生成回答时强制标注来源片段 `[Source: chunk_id, paper_title]`
+- [ ] 前端消息渲染：引用片段高亮 + 点击跳转原文
+- [ ] `GET /api/papers/{id}/chunks/{chunk_id}` 返回具体段落
+
+### 4.4 跨会话 Memory（Long-Term KB）
+
+- [ ] 论文上传时自动提取：标题、作者、年份、摘要、关键词，存入 PostgreSQL
+- [ ] 新会话创建时自动关联相关历史论文（基于 embedding 相似度）
+- [ ] 分析报告历史自动归档为可检索知识条目
+- [ ] `GET /api/kb/search` — 语义搜索历史报告/论文摘要
+
+### 4.5 会话摘要（Conversation Summarization）
+
+- [ ] 消息数 > 20 或 token 估计 > 30K 时触发摘要
+- [ ] 摘要替换对话历史进入 context，仅保留摘要 + 最近 N 条
+- [ ] 摘要结果存入 DB，会话恢复时先读摘要
+
+---
+
+## Phase 5 — Tool 生态扩展 + 可观测性
+
+> 目标：让 Agent 真正成为"全能助手"，不只是"分析师"；建立生产级可观测性。
+
+### 5.1 MCP Server 暴露
+
+- [ ] `app/mcp/server.py` — FastAPI → MCP 协议转换层
+- [ ] 暴露工具：search_papers / analyze / chat / get_history
+- [ ] 支持 Cursor / Claude Desktop 直接调用本项目 Agent
+
+### 5.2 Code Interpreter
+
+- [ ] 安全沙箱执行 Python 代码（` Pyodide` 或 `subprocess + timeout`）
+- [ ] 分析报告时自动跑实验数据对比、生成统计图表
+- [ ] 前端展示代码执行结果（表格 + matplotlib 图表）
+
+### 5.3 意图识别（Intent Classification）
+
+- [ ] 单一对话入口（取消 chat/analyze tab 区分）
+- [ ] `IntentNode`：classify → {rag, analyze, writing, search_web, general}
+- [ ] 多意图时并发路由，同时执行后合并结果
+- [ ] 意图不明时默认 rag + analyze 并发
+
+### 5.4 分布式追踪（Observability）
+
+- [ ] 集成 LangSmith（可选，API Key 配置开关）
+- [ ] 记录每次请求的：token 消耗、节点耗时、检索召回率
+- [ ] 慢查询告警（单个节点 > 60s 或 总流程 > 5min）
+- [ ] 每轮 Agent 调用写入审计表（`agent_audit_log`）
+
+---
+
+## Phase 6 — Multi-Agent 协作 + 自动优化
+
+> 目标：从单 Agent 进化到 Agent 团队协作；Agent 具备自我反思和改进能力。
+
+### 6.1 Multi-Agent 路由
+
+- [ ] `RouterNode`：根据意图分发到专业 Agent
+  - `ResearchAgent` — 分析、对比、方法论评估
+  - `WritingAgent` — 写作辅助、章节草稿、引用格式化
+  - `SearchAgent` — 外部检索、文献发现、arXiv 监控
+- [ ] Agent 间通过 Graph State 共享上下文
+
+### 6.2 Agent Self-Improvement
+
+- [ ] 用户反馈收集（👍/👎 按钮）写入反馈表
+- [ ] 根据反馈自动调整：检索权重、回答风格、评分标准
+- [ ] RAG 检索结果评分闭环（用户点击引用的片段 = 高质量信号）
+
+### 6.3 主动推送（Proactive Agent）
+
+- [ ] 定期检查新上线的相关论文（arXiv API 监控）
+- [ ] 用户上传新论文 → 自动触发相关历史分析通知
+- [ ] 重大发现（论文引用关系变化）主动摘要推送
+
+---
+
+## Phase 7 — 工程化与部署
+
+- [ ] Redis 缓存 Embedding 结果（避免重复计算同一片段）
 - [ ] CI/CD（GitHub Actions → Docker build → 部署）
 - [ ] 用户认证（JWT）
+- [ ] A2A 协议集成（Sub-Agent 微服务化）
 
 ---
 
