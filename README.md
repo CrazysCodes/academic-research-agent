@@ -6,11 +6,11 @@
 
 | 层次 | 技术 |
 |------|------|
-| 前端 | Next.js 14 · TypeScript · Tailwind CSS · shadcn/ui · Zustand |
+| 前端 | Next.js 16 · React 19 · TypeScript · Tailwind CSS · shadcn/ui · Zustand |
 | 后端 | FastAPI · Python 3.11 · Pydantic v2 · uv |
 | AI | LangChain · LangGraph · OpenAI / Anthropic |
 | 向量库 | Qdrant |
-| 文档解析 | python-docx (Word) · pymupdf4llm (PDF) |
+| 文档解析 | markitdown (Word) · pymupdf4llm (PDF) |
 | 容器化 | Docker · Docker Compose |
 
 ## 项目结构
@@ -23,7 +23,7 @@ academic-research-agent/
 │   │   ├── services/      # 业务逻辑层
 │   │   ├── core/          # AI 核心 (agents, tools, graph)
 │   │   ├── models/        # Pydantic 请求/响应模型
-│   │   ├── repositories/  # 数据访问层 (Qdrant)
+│   │   ├── repositories/  # 数据访问层 (PostgreSQL / Qdrant)
 │   │   ├── config.py
 │   │   └── main.py
 │   ├── pyproject.toml

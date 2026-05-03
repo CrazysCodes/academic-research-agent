@@ -13,6 +13,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from app.api.deps import get_db_session
 from app.core.graph import research_graph
 from app.core.llm import create_chat_llm
+from app.core.nodes.query_rewrite import rewrite_analyze_query
 from app.models.request import AnalyzeRequest, RefineRequest
 from app.repositories import analysis_repo, paper_repo
 from app.repositories import vector_repo
@@ -61,6 +62,8 @@ def _build_node_output_payload(name: str, output: dict, *, iterations: int = 0) 
 async def _stream_agent(req: AnalyzeRequest, db: AsyncSession):
     """执行完整 LangGraph Agent 管线：Planner → Retriever → Writer → Reviewer。"""
     logger.info("开始多 Agent 分析，paper_ids=%s，query=%s", req.paper_ids, req.query[:80])
+    rewrite = await rewrite_analyze_query(req.query)
+    agent_query = rewrite.rewritten_query
 
     # 全文模式：预加载所有选中论文的全部文本块，跳过 RAG 向量检索
     # 按论文交替取块（轮询），确保多篇论文均匀覆盖
@@ -92,7 +95,7 @@ async def _stream_agent(req: AnalyzeRequest, db: AsyncSession):
     )
 
     initial_state = {
-        "query": req.query,
+        "query": agent_query,
         "paper_ids": req.paper_ids,
         "sub_queries": [],
         "context_chunks": all_chunks,  # 预填充全文，RetrieverNode 将跳过 RAG

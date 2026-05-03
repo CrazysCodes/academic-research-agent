@@ -12,7 +12,7 @@
 - RAG 多文档检索（Qdrant 向量库 + 混合检索）
 - LangGraph 多 Agent 编排（检索 / 写作 / 评审 Sub-Agent）
 - MCP Server 暴露（可供 Claude Desktop / Cursor 直接调用）
-- 2markdown 复用（PDF/Word 解析，体现工程复用意识）
+- markitdown + pymupdf4llm 文档解析（PDF/Word → Markdown，体现工程复用意识）
 
 ---
 
@@ -20,7 +20,7 @@
 
 | 层次 | 技术选型 | 说明 |
 |------|----------|------|
-| 前端 UI | Next.js 14 + TypeScript | App Router + RSC |
+| 前端 UI | Next.js 16 + React 19 + TypeScript | App Router |
 | 前端样式 | Tailwind CSS + shadcn/ui | 快速构建专业 UI |
 | 前端状态 | Zustand | 轻量全局状态 |
 | 前端数据 | SWR | 流式响应 + 缓存 |
@@ -30,7 +30,7 @@
 | 向量库 | Qdrant | 高性能向量检索 |
 | 关系库 | PostgreSQL + SQLAlchemy | 元数据持久化 |
 | 缓存/队列 | Redis | 任务状态 + 响应缓存 |
-| 文档解析 | 2markdown（复用） | PDF/Word → Markdown |
+| 文档解析 | markitdown + pymupdf4llm | PDF/Word → Markdown |
 | 容器化 | Docker Compose | 一键启动所有服务 |
 
 ---
@@ -59,7 +59,7 @@ FastAPI 后端
         ├── PostgreSQL
         └── Qdrant
 
-外部服务：LLM API / Embedding API / 2markdown / Web Search
+外部服务：LLM API / Embedding API / Web Search
 ```
 
 ---
@@ -85,7 +85,7 @@ backend/
 │   ├── services/
 │   │   ├── rag_service.py      # RAG 检索 + 上下文注入
 │   │   ├── agent_service.py    # Agent 编排调用
-│   │   └── doc_service.py      # 文档解析（调用 2markdown）
+│   │   └── doc_service.py      # 文档解析（markitdown / pymupdf4llm）
 │   ├── core/
 │   │   ├── agents/
 │   │   │   ├── research_agent.py   # 检索规划 Agent
@@ -166,7 +166,7 @@ class PaperInfo(BaseModel):
 用户请求（Query）
     │
     ▼
-QueryRewriteNode（查询改写） ← Phase 3 新增
+QueryRewriteNode（查询改写） ← Phase 3 已接入
     │  改写后的问题
     ▼
 PlannerNode（规划拆解）
@@ -259,13 +259,13 @@ async def generate_mermaid(description: str) -> str:
 PDF/Word 上传
      │
      ▼
-2markdown 解析 → Markdown 文本
+markitdown / pymupdf4llm 解析 → Markdown 文本
      │
      ▼
 文本分块（chunk_size=512, overlap=64）
      │
      ▼
-Embedding（text-embedding-3-small）
+Embedding（text-embedding-3-small，默认 1536 维）
      │
      ▼
 Qdrant 存储（collection per paper）
@@ -513,7 +513,7 @@ volumes:
 
 - [x] Docker Compose 环境搭建（PostgreSQL + Qdrant + Redis）
 - [x] FastAPI 基础框架 + 项目目录结构
-- [x] PDF/Word 上传 → 2markdown 解析 → 分块 → Embedding → Qdrant 存储
+- [x] PDF/Word 上传 → markitdown / pymupdf4llm 解析 → 分块 → Embedding → Qdrant 存储
 - [x] 单文档 RAG 问答（`/chat` 接口 + 流式输出）
 - [x] Next.js 基础 UI（文档上传 + 对话界面）
 
@@ -524,13 +524,13 @@ volumes:
 - [x] Web 搜索 Tool 集成（Tavily）
 - [x] 前端多文档选择器 + 对比结果展示 + 分析历史持久化
 
-### Phase 3 — RAG 增强 + 报告导出 🚧 规划中
+### Phase 3 — RAG 增强 + 报告导出 🚧 部分完成
 
-- [ ] Query Rewrite / Expansion（RAG 前查询改写）
-- [ ] Markdown / PDF 报告导出
-- [ ] Mermaid 图表生成
-- [ ] 引用格式化（APA / MLA / IEEE / BibTeX）
-- [ ] 写作草稿辅助（摘要 / 引言 / 相关工作章节生成）
+- [x] Query Rewrite / Expansion（RAG 前查询改写）
+- [x] Markdown / PDF 报告导出
+- [x] Mermaid 图表生成
+- [x] 引用格式化（APA / MLA / IEEE / BibTeX）
+- [x] 写作草稿辅助（摘要 / 引言 / 相关工作章节生成）
 
 ### Phase 4 — RAG 生产级 + Memory 系统
 
@@ -591,4 +591,4 @@ volumes:
 | FastAPI 分层架构 + async ORM | 后端工程规范，类比 Java 体现迁移能力 | 基础 |
 | 流式 SSE 输出 + 前端状态管理 | 全栈联调能力，用户体验意识 | 基础 |
 | MCP Server 暴露 | 前沿 AI 生态认知（加分项） | 加分 |
-| 2markdown 复用 + Docker Compose | 工程复用意识，完整项目可运行 | 基础 |
+| markitdown/pymupdf4llm 文档解析 + Docker Compose | 工程复用意识，完整项目可运行 | 基础 |

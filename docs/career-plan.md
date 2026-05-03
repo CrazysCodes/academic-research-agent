@@ -117,14 +117,14 @@ class AnalyzeResponse(BaseModel):
 **定位**：帮助研究者完成从文献调研到辅助写作的全流程
 
 **核心亮点**：
-- 复用已有的 2markdown（PDF/Word 解析）作为预处理模块
+- 复用已有的 markitdown / pymupdf4llm（PDF/Word 解析）作为预处理模块
 - CV 论文背景 → 天然是目标用户，需求理解深
 - 技术覆盖面对齐 JD 所有关键词
 
 ### 功能分层
 
 **必须做（核心链路，2-3周）**
-- 多格式文档解析（PDF/Word，复用 2markdown）
+- 多格式文档解析（PDF/Word，复用 markitdown / pymupdf4llm）
 - RAG 多文档检索问答
 - 多文档对比分析 Agent
 
@@ -139,7 +139,7 @@ class AnalyzeResponse(BaseModel):
 ### 技术覆盖
 
 ```
-文档解析   → 2markdown 复用
+文档解析   → markitdown / pymupdf4llm 复用
 RAG        → 多文档检索 + 上下文注入
 Agent编排  → LangGraph（多步规划、反思机制）
 Tool调用   → Mermaid生成、LaTeX片段、Web搜索

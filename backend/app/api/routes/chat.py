@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db_session
 from app.core.llm import create_chat_llm
+from app.core.nodes.query_rewrite import retrieval_texts, rewrite_chat_query
 from app.models.request import ChatRequest
 from app.repositories import paper_repo
 from app.services import rag_service
@@ -72,7 +73,8 @@ async def chat_stream(
                 detail=f"Paper '{paper.title}' is not ready (status: {paper.status})",
             )
 
-    context_chunks = await rag_service.retrieve(req.paper_ids, req.query)
+    rewrite = await rewrite_chat_query(req.query)
+    context_chunks = await rag_service.retrieve_multi(req.paper_ids, retrieval_texts(rewrite))
     if not context_chunks:
         raise HTTPException(status_code=404, detail="No relevant content found in selected papers")
 

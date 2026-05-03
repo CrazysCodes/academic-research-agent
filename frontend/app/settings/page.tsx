@@ -21,7 +21,7 @@ const PRESET_MODELS = [
 
 const INIT_FORM = {
   llm_model: "", openai_api_key: "", openai_base_url: "",
-  embedding_model: "", embedding_api_key: "", embedding_base_url: "",
+  embedding_model: "", embedding_dim: "1536", embedding_api_key: "", embedding_base_url: "",
 }
 
 export default function SettingsPage() {
@@ -36,7 +36,8 @@ export default function SettingsPage() {
         setSettings(s)
         setForm({
           llm_model: s.llm_model, openai_api_key: "", openai_base_url: s.openai_base_url,
-          embedding_model: s.embedding_model, embedding_api_key: "", embedding_base_url: s.embedding_base_url,
+          embedding_model: s.embedding_model, embedding_dim: String(s.embedding_dim),
+          embedding_api_key: "", embedding_base_url: s.embedding_base_url,
         })
       })
       .catch(() => setMessage({ type: "error", text: "无法获取当前配置" }))
@@ -47,10 +48,11 @@ export default function SettingsPage() {
     setMessage(null)
     try {
       // 只发送有变化的字段，空 key 不发（避免覆盖已有值）
-      const payload: Record<string, string> = {}
+      const payload: Partial<LLMSettings> = {}
       if (form.llm_model !== settings?.llm_model) payload.llm_model = form.llm_model
       if (form.openai_base_url !== settings?.openai_base_url) payload.openai_base_url = form.openai_base_url
       if (form.embedding_model !== settings?.embedding_model) payload.embedding_model = form.embedding_model
+      if (Number(form.embedding_dim) !== settings?.embedding_dim) payload.embedding_dim = Number(form.embedding_dim)
       if (form.embedding_base_url !== settings?.embedding_base_url) payload.embedding_base_url = form.embedding_base_url
       if (form.openai_api_key) payload.openai_api_key = form.openai_api_key
       if (form.embedding_api_key) payload.embedding_api_key = form.embedding_api_key
@@ -70,6 +72,7 @@ export default function SettingsPage() {
     form.llm_model !== settings.llm_model ||
     form.openai_base_url !== settings.openai_base_url ||
     form.embedding_model !== settings.embedding_model ||
+    Number(form.embedding_dim) !== settings.embedding_dim ||
     form.embedding_base_url !== settings.embedding_base_url ||
     form.openai_api_key !== "" ||
     form.embedding_api_key !== ""
@@ -179,6 +182,21 @@ export default function SettingsPage() {
               value={form.embedding_model}
               onChange={(e) => setForm((f) => ({ ...f, embedding_model: e.target.value }))}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="embedding_dim">向量维度</Label>
+            <Input
+              id="embedding_dim"
+              type="number"
+              min={1}
+              placeholder="如 1536"
+              value={form.embedding_dim}
+              onChange={(e) => setForm((f) => ({ ...f, embedding_dim: e.target.value }))}
+            />
+            <p className="text-xs text-muted-foreground">
+              需与 Embedding 模型输出维度一致；更改后仅影响新建向量 collection。
+            </p>
           </div>
 
           {/* Actions */}

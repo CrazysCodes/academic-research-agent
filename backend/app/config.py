@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Embedding
     embedding_model: str = "text-embedding-3-small"
-    embedding_dim: int = 1024  # text-embedding-v4 默认 1024
+    embedding_dim: int = 1536  # Must match embedding_model output dimension
 
     # Chunking
     chunk_size: int = 512

@@ -10,7 +10,7 @@
 
 - [x] 项目骨架搭建（monorepo）
 - [x] 后端 FastAPI 框架 + uv 环境
-- [x] 前端 Next.js 14 + shadcn/ui
+- [x] 前端 Next.js 16 + React 19 + shadcn/ui
 - [x] Docker Compose（应用 + 基础设施分离）
 - [x] Git 仓库初始化并推送（monorepo → github.com/CrazysCodes/academic-research-agent）
 - [x] 服务器 Qdrant 部署（115.190.79.5:6333，Docker infra 层）
@@ -171,7 +171,7 @@ npm run dev
 
 ---
 
-## Phase 3 — RAG 增强 + 报告增强与导出 🚧 规划中
+## Phase 3 — RAG 增强 + 报告增强与导出 🚧 部分完成
 
 > 目标：RAG 管线优化 + 让分析报告更专业可导出 + 引入图表和写作辅助
 
@@ -180,11 +180,11 @@ npm run dev
 > 当前：用户问题直接 embedding 检索，复杂/简短问题召回差。
 > 目标：Query Rewrite → 改写成高质量检索问题再检索。
 
-- [ ] `app/core/nodes/query_rewrite.py` — QueryRewriteNode：LLM 将用户原始问题改写成更适合检索的形式
+- [x] `app/core/nodes/query_rewrite.py` — QueryRewriteNode：LLM 将用户原始问题改写成更适合检索的形式
   - **analyze 管线**：改写成结构化分析问题（适合 Planner 多子查询）
   - **chat 管线**：Query Expansion / HyDE 改进召回（短问题→完整问题，或用猜测答案辅助检索）
-- [ ] chat 管线：`POST /api/chat` 接入 QueryRewriteNode，rewrite 后再 RAG
-- [ ] analyze 管线：`_stream_agent` 入口处加 query rewrite，预处理后再进 PlannerNode
+- [x] chat 管线：`POST /api/chat` 接入 QueryRewriteNode，rewrite 后多路 RAG 检索，失败回退原始 query
+- [x] analyze 管线：`_stream_agent` 入口处加 query rewrite，预处理后再进 PlannerNode
 
 ### 3.1 报告导出
 
@@ -208,12 +208,64 @@ npm run dev
 - [x] `POST /api/analyze/{id}/draft-section` — SSE 流式生成章节草稿（摘要/引言/相关工作），基于分析报告 + 论文全文上下文
 - [x] 前端对话优化区右上角「生成：摘要 / 引言 / 相关工作」快捷按钮，流式渲染到对话消息流
 
+### 3.5 RAG 评估体系
+
+> 目标：建立可重复的离线评估，避免每次优化 RAG 只靠主观试用。
+
+- [ ] 测试集建设：从已上传论文中人工构造 80~150 条 golden QA
+  - 单篇事实型：定义、方法、实验设置、关键结论
+  - 多篇对比型：方法差异、指标对比、限制与贡献
+  - 难检索型：短 query、同义表达、跨章节信息
+  - 拒答型：论文中没有答案的问题，验证“不知道”能力
+- [ ] 标注格式：`query`、`paper_ids`、`gold_answer`、`relevant_chunk_ids`、`answerable`、`difficulty`、`tags`
+- [ ] 检索评估脚本：固定 embedding/model 配置，批量跑 `retrieve()` / `retrieve_multi()`
+- [ ] 生成评估脚本：固定 prompt、temperature、top-k，批量生成答案并保存上下文
+- [ ] 核心指标：
+  - 检索：Recall@k、MRR、nDCG@k、Context Precision、Context Recall
+  - 生成：Answer Faithfulness、Answer Relevance、Citation Accuracy、拒答准确率、幻觉率
+  - 工程：首 token 延迟、总延迟、token 成本、失败率
+- [ ] 回归门槛：Query Rewrite / Hybrid / Rerank 改动后，Recall@5 和 Faithfulness 不得下降超过阈值
+
+### 3.6 Agent 评估体系
+
+> 目标：评估完整 LangGraph Agent 是否真的能完成“研究分析”任务，而不只评估单次 RAG 命中。
+
+- [ ] 测试集建设：构造 30~60 条多文档任务
+  - 分析报告：方法论比较、实验结果对比、研究空白总结
+  - 报告优化：要求缩短、改写结构、补充限制、增强引用
+  - 写作辅助：摘要/引言/相关工作章节草稿
+  - 鲁棒性：模糊问题、冲突论文、无关论文混入
+- [ ] 运行方法：固定模型版本、temperature、paper_ids；记录 LangGraph 节点事件、节点输出、最终报告和 refinements
+- [ ] 评审方法：LLM-as-judge 初评 + 人工抽样复核；rubric 固定，避免每轮标准漂移
+- [ ] 核心指标：
+  - 任务成功率：是否完成用户目标，是否输出可用报告
+  - 计划质量：Planner 子查询覆盖度、无跑题率
+  - 证据覆盖：报告关键论断是否能追溯到论文 chunk
+  - 报告质量：结构完整性、比较深度、事实准确性、语言一致性
+  - 自我修订：Reviewer 通过率、平均迭代次数、修订后质量提升
+  - 交互质量：优化指令遵循率、草稿可用率、SSE 完整率
+  - 工程指标：端到端延迟、token 成本、异常率
+
 ---
 
 ## Phase 4 — RAG 生产级 + Memory 系统
 
 > 目标：把 RAG 从"玩具级"提升到"生产级"；加入跨会话长期记忆，实现真正的知识积累。
 > 核心认知：编排器（LangGraph）是通用基础设施，本阶段重点是强化 RAG 质量和 Memory 体系。
+
+### 4.0 VectorStore 抽象 + Milvus 可选迁移
+
+> 评估结论：复杂度中等，可以接受，适合作为可选增强路线；不建议在当前阶段直接替换主线 Qdrant。
+
+- [ ] 抽象 `VectorStoreRepository` 接口，统一 create / upsert / search / scroll / delete 语义
+- [ ] 保留 `QdrantVectorStoreRepository` 作为默认实现，避免破坏现有 demo
+- [ ] 新增 `MilvusVectorStoreRepository`：
+  - 方案 A：继续 collection per paper，改动小但 collection 数量随论文增长
+  - 方案 B：单 collection + `paper_id` 标量过滤，长期更适合 Milvus，但需要迁移现有查询和 scroll 逻辑
+- [ ] infra 层新增 Milvus standalone docker-compose profile（Milvus + etcd + MinIO）
+- [ ] 配置项：`VECTOR_STORE=qdrant|milvus`、`MILVUS_URI`、`MILVUS_TOKEN`、`MILVUS_COLLECTION`
+- [ ] 迁移脚本：Qdrant scroll 全量 chunk → Milvus bulk insert，校验 chunk_count 和向量维度
+- [ ] 验收：同一 RAG 测试集上 Milvus 与 Qdrant 的 Recall@5 / 延迟 / 成本对比报告
 
 ### 4.1 混合检索（Hybrid Search）
 

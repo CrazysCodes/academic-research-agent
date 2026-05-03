@@ -112,6 +112,7 @@ export interface LLMSettings {
   openai_api_key: string
   openai_base_url: string
   embedding_model: string
+  embedding_dim: number
   embedding_api_key: string
   embedding_base_url: string
 }

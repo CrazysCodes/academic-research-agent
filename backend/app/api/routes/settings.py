@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import APIRouter
 
 from app.config import settings
@@ -18,6 +18,7 @@ class LLMSettings(BaseModel):
     openai_api_key: str
     openai_base_url: str
     embedding_model: str
+    embedding_dim: int = Field(gt=0)
     embedding_api_key: str
     embedding_base_url: str
 
@@ -27,6 +28,7 @@ class LLMSettingsUpdate(BaseModel):
     openai_api_key: str | None = None
     openai_base_url: str | None = None
     embedding_model: str | None = None
+    embedding_dim: int | None = Field(default=None, gt=0)
     embedding_api_key: str | None = None
     embedding_base_url: str | None = None
 
@@ -37,6 +39,7 @@ def _current_settings() -> LLMSettings:
         openai_api_key=_mask_key(settings.openai_api_key),
         openai_base_url=settings.openai_base_url,
         embedding_model=settings.embedding_model,
+        embedding_dim=settings.embedding_dim,
         embedding_api_key=_mask_key(settings.embedding_api_key),
         embedding_base_url=settings.embedding_base_url,
     )
@@ -58,6 +61,8 @@ async def update_settings(req: LLMSettingsUpdate):
         settings.openai_base_url = req.openai_base_url
     if req.embedding_model is not None:
         settings.embedding_model = req.embedding_model
+    if req.embedding_dim is not None:
+        settings.embedding_dim = req.embedding_dim
     if req.embedding_api_key is not None:
         settings.embedding_api_key = req.embedding_api_key
     if req.embedding_base_url is not None:

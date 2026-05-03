@@ -73,3 +73,16 @@ async def retrieve(paper_ids: list[str], query: str, top_k: int = 5) -> list[str
     """Embed query → search Qdrant → return relevant chunks."""
     query_vector = await _get_embeddings().aembed_query(query)
     return vector_repo.search(paper_ids, query_vector, top_k)
+
+
+async def retrieve_multi(paper_ids: list[str], queries: list[str], top_k: int = 5) -> list[str]:
+    """Retrieve with multiple query variants and dedupe chunks by text."""
+    seen: set[str] = set()
+    chunks: list[str] = []
+    for query in queries:
+        for chunk in await retrieve(paper_ids, query, top_k=top_k):
+            if chunk in seen:
+                continue
+            seen.add(chunk)
+            chunks.append(chunk)
+    return chunks[:top_k]

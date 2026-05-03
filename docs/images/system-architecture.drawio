@@ -70,7 +70,7 @@
     <mxCell id="ai_embed" value="Embedding API&#xa;text-embedding-3-small" style="rounded=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="ai_zone">
       <mxGeometry x="50" y="145" width="200" height="60" as="geometry"/>
     </mxCell>
-    <mxCell id="ai_2md" value="2markdown&#xa;PDF/Word 解析服务" style="rounded=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="ai_zone">
+    <mxCell id="ai_2md" value="markitdown / pymupdf4llm&#xa;PDF/Word 解析" style="rounded=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="ai_zone">
       <mxGeometry x="50" y="235" width="200" height="60" as="geometry"/>
     </mxCell>
     <mxCell id="ai_web" value="Web Search API&#xa;Tavily / SerpAPI" style="rounded=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="ai_zone">

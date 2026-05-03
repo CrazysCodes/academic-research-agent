@@ -18,7 +18,22 @@
 **优点**：京东大促验证、基于 Faiss 性能扎实、分布式高可用
 **缺点**：社区极弱(~2k stars)、无原生 BM25、LangChain 集成浅、迭代慢、英文生态几乎没有
 
-**结论**：本项目继续使用 Qdrant，在中等规模 RAG 场景下性能、生态、易用性最优。
+**结论**：本项目默认继续使用 Qdrant，在中等规模 RAG 场景下性能、生态、易用性最优。Milvus 切换复杂度中等，可以接受，但更适合作为可选增强路线：先抽象 VectorStore 接口，再新增 Milvus adapter 和迁移脚本。
+
+### Qdrant → Milvus 切换复杂度评估（2026-05）
+
+| 维度 | 评估 |
+|------|------|
+| 代码改动 | 中等偏低：当前向量库访问集中在 `vector_repo.py`，业务层主要依赖 create/upsert/search/scroll/delete 语义 |
+| 部署改动 | 中等：Milvus standalone Docker Compose 通常包含 Milvus、etcd、MinIO，资源和运维复杂度高于 Qdrant 单容器 |
+| 数据建模 | 中等：当前每篇论文一个 collection；Milvus 可沿用此模式，也可改为单 collection + `paper_id` 标量过滤 |
+| 数据迁移 | 中等：现有 payload 简单（text + chunk_index），但需批量 scroll Qdrant、insert Milvus、校验向量维度和 chunk_count |
+| 风险 | 主要是 embedding 维度不一致、Milvus schema/index 参数选择、collection 数量增长和部署资源占用 |
+
+**建议路线**：
+1. 先引入 `VectorStoreRepository` 抽象，保留 Qdrant 默认实现。
+2. 新增 Milvus 实现，用同一 RAG 测试集比较 Recall@5、延迟和失败率。
+3. 评估通过后再决定是否迁移历史数据；短期不直接替换主线。
 
 ---
 

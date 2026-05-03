@@ -364,7 +364,7 @@ RAG（Retrieval-Augmented Generation）分三步：
 2. **在线检索**：用户问题 → Embedding → 向量相似度搜索（cosine） → 返回 top-k 相关块
 3. **生成**：将检索到的块作为 context 注入 LLM prompt → 生成答案
 
-本项目的向量数据库选用 Qdrant，每篇论文一个 collection，Embedding 模型用阿里云 `text-embedding-v4`（1024 维）。
+本项目的向量数据库选用 Qdrant，每篇论文一个 collection。默认 Embedding 配置为 `text-embedding-3-small`（1536 维）；若切到第三方模型（例如 1024 维模型），必须同步设置 `EMBEDDING_DIM`。
 
 ### Q2：RAG 和直接把文档喂给 LLM 有什么区别？
 
