@@ -15,3 +15,10 @@
 - 建立 SSH 隧道并验证端口可达；后端在 `http://127.0.0.1:8001` 启动成功，`/health` 返回 ok，`/api/papers` 返回空列表。
 - 服务器 PostgreSQL `app` 库已创建项目表：papers、conversations、messages、analyses 等。
 - 前端在 `http://localhost:3000` 启动成功，HTTP 200。
+- 修复删除论文时 Qdrant 不可用导致 500 的问题：现在先删除 PostgreSQL 元数据，再尽力清理向量 collection；Qdrant 清理失败只记录 warning。
+- 复查当前上传失败日志：DashScope embedding 请求已返回 200，失败点是 `QDRANT_URL=http://localhost:16333` 当前不可连接，说明向量写入依赖的 Qdrant 隧道/服务未就绪。
+- 按用户要求直接将向量库从 Qdrant 切换为 Milvus，不做迁移脚本、双写或回滚。
+- `vector_repo.py` 改为 MilvusClient 实现：单 collection `paper_chunks`，通过 `paper_id` 标量过滤实现按论文写入、检索、列块和删除。
+- 依赖从 `qdrant-client` 切到 `pymilvus`，并同步更新 `uv.lock`。
+- 验证通过：后端编译成功；Milvus 只读连接返回空 collection；创建 `paper_chunks` 成功；临时向量写入、search、query、delete 全链路成功。
+- 处理 Milvus 维度错误：确认 DashScope multimodal embedding 请求必须显式传 `parameters.dimension`；`tongyi-embedding-vision-flash-2026-03-06` 最高 768 维，切换为 `tongyi-embedding-vision-plus-2026-03-06` 并设置 `EMBEDDING_DIM=1024`，实测返回 1024 维。

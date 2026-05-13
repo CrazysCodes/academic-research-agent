@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,10 +12,16 @@ class Settings(BaseSettings):
     # Embedding Provider（留空则复用上面的 openai 配置）
     embedding_api_key: str = ""
     embedding_base_url: str = ""
+    dashscope_embedding_url: str = (
+        "https://dashscope.aliyuncs.com/api/v1/services/embeddings/"
+        "multimodal-embedding/multimodal-embedding"
+    )
 
-    # Qdrant
-    qdrant_url: str = "http://localhost:6333"
-    qdrant_api_key: str = ""
+    # Milvus
+    milvus_uri: str = "http://localhost:19530"
+    milvus_token: str = ""
+    milvus_collection: str = "paper_chunks"
+    milvus_index_type: str = "AUTOINDEX"
 
     # Embedding
     embedding_model: str = "text-embedding-3-small"
@@ -38,6 +45,13 @@ class Settings(BaseSettings):
 
     # Server
     debug: bool = False
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def _parse_debug(cls, value):
+        if isinstance(value, str) and value.lower() in {"release", "prod", "production"}:
+            return False
+        return value
 
 
 settings = Settings()

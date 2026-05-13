@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,12 +11,13 @@ from app.repositories import paper_repo, vector_repo
 from app.services import doc_service, rag_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
 async def _process_paper(paper_id: str, filename: str, content: bytes) -> None:
-    """后台任务：解析 → 切块 → 向量化 → 写入 Qdrant，完成后更新 DB。"""
+    """后台任务：解析 → 切块 → 向量化 → 写入 Milvus，完成后更新 DB。"""
     async with AsyncSessionLocal() as db:
         paper = await paper_repo.get(db, paper_id)
         if not paper:
@@ -102,6 +104,17 @@ async def delete_paper(
     paper = await paper_repo.get(db, paper_id)
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
-    vector_repo.delete_collection(paper_id)
     await paper_repo.delete(db, paper_id)
-    return {"message": "Deleted"}
+
+    vector_deleted = True
+    try:
+        vector_repo.delete_collection(paper_id)
+    except Exception as exc:
+        vector_deleted = False
+        logger.warning(
+            "论文元数据已删除，但 Milvus 向量清理失败，paper_id=%s: %s",
+            paper_id,
+            exc,
+        )
+
+    return {"message": "Deleted", "vector_deleted": vector_deleted}

@@ -25,7 +25,7 @@ doc_service.parse_document()
 rag_service.index_paper()
   ├── RecursiveCharacterTextSplitter (chunk_size=512, overlap=64)
   ├── OpenAI text-embedding-3-small (1536 dim，需与 EMBEDDING_DIM 一致)
-  └── Qdrant upsert (collection: "paper_{id}")
+  └── Milvus upsert (collection: "paper_chunks", filter by paper_id)
   │
   ▼
 paper.status = "ready" / "failed"

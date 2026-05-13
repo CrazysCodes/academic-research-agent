@@ -14,7 +14,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.utils.json import parse_json_markdown
 from pydantic import BaseModel
 
-from app.core.llm import create_chat_llm, create_structured_llm
+from app.core.llm import create_chat_llm, create_structured_llm, supports_structured_output
 from app.core.state import ResearchState
 from app.core.tools.web_search import search_web
 
@@ -90,14 +90,17 @@ async def reviewer_node(state: ResearchState) -> dict:
     ]
 
     # ── 方案一：Function Calling 强约束 ──
-    try:
-        structured_llm = create_structured_llm(_ReviewerOutput)
-        result_obj: _ReviewerOutput = await structured_llm.ainvoke(messages)
-        score = max(0, min(10, result_obj.score))
-        logger.info("ReviewerNode [structured] 成功，评分=%d", score)
-        return {"score": score, "feedback": result_obj.feedback}
-    except Exception as e:
-        logger.warning("ReviewerNode [structured] 失败，降级到 parse_json_markdown 方案: %s", e)
+    if supports_structured_output():
+        try:
+            structured_llm = create_structured_llm(_ReviewerOutput)
+            result_obj: _ReviewerOutput = await structured_llm.ainvoke(messages)
+            score = max(0, min(10, result_obj.score))
+            logger.info("ReviewerNode [structured] 成功，评分=%d", score)
+            return {"score": score, "feedback": result_obj.feedback}
+        except Exception as e:
+            logger.warning("ReviewerNode [structured] 失败，降级到 parse_json_markdown 方案: %s", e)
+    else:
+        logger.info("ReviewerNode 跳过 structured 输出，使用 parse_json_markdown 方案")
 
     # ── 方案二：普通调用 + parse_json_markdown + retry ──
     response = await llm.ainvoke(messages)

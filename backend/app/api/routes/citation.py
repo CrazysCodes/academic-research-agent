@@ -44,7 +44,7 @@ async def generate_citation(
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
 
-    # 从 Qdrant 获取论文首页内容（第一个 chunk 通常包含标题、作者等元信息）
+    # 从 Milvus 获取论文首页内容（第一个 chunk 通常包含标题、作者等元信息）
     first_chunk = ""
     try:
         chunks = vector_repo.get_all_chunks(paper_id)

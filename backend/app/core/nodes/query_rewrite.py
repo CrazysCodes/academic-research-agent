@@ -10,7 +10,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.utils.json import parse_json_markdown
 from pydantic import BaseModel, Field
 
-from app.core.llm import create_chat_llm, create_structured_llm
+from app.core.llm import create_chat_llm, create_structured_llm, supports_structured_output
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,12 @@ Rules:
 - Keep the user's original intent.
 - Use the same language as the user where possible.
 - Produce 2 to 4 retrieval queries.
+- Expand vague academic terms into concrete searchable terms when helpful.
+  For example, "实验参数" should include likely terms such as GPU, hardware,
+  learning rate, batch size, epochs, iterations, optimizer, training settings,
+  implementation details, parameter settings, and experimental setup.
+- If the query asks for a category and likely subfields, include both the broad
+  category query and subfield-specific retrieval queries.
 - Do not invent paper-specific facts; the hypothetical answer is only a retrieval aid."""
 
 _ANALYZE_SYSTEM = """You rewrite research-analysis requests for multi-paper academic analysis.
@@ -118,31 +124,37 @@ async def _rewrite(query: str, system_prompt: str, mode: str) -> QueryRewriteRes
         HumanMessage(content=f"User query:\n{query}"),
     ]
 
-    try:
-        structured_llm = create_structured_llm(QueryRewriteResult)
-        result: QueryRewriteResult = await structured_llm.ainvoke(messages)
-        normalized = _normalize(query, result)
-        logger.info(
-            "QueryRewriteNode [%s][structured] 成功: %s -> %s",
-            mode,
-            query[:80],
-            normalized.rewritten_query[:80],
-        )
-        return normalized
-    except Exception as e:
-        logger.warning("QueryRewriteNode [%s][structured] 失败，降级普通 JSON 解析: %s", mode, e)
+    if supports_structured_output():
+        try:
+            structured_llm = create_structured_llm(QueryRewriteResult)
+            result: QueryRewriteResult = await structured_llm.ainvoke(messages)
+            normalized = _normalize(query, result)
+            logger.info(
+                "QueryRewriteNode [%s][structured] 成功: %s -> %s",
+                mode,
+                query[:80],
+                normalized.rewritten_query[:80],
+            )
+            return normalized
+        except Exception as e:
+            logger.warning("QueryRewriteNode [%s][structured] 失败，降级普通 JSON 解析: %s", mode, e)
+    else:
+        logger.info("QueryRewriteNode [%s] 跳过 structured 输出，使用普通 JSON 解析", mode)
 
     try:
         llm = create_chat_llm(streaming=False)
         response = await llm.ainvoke(messages)
+        logger.info("QueryRewriteNode [%s][json] raw: %r", mode, str(response.content)[:1000])
         parsed = _parse_result(str(response.content))
         if parsed:
             normalized = _normalize(query, parsed)
             logger.info(
-                "QueryRewriteNode [%s][json] 成功: %s -> %s",
+                "QueryRewriteNode [%s][json] 成功: %s -> %s; retrieval_queries=%s; hyde=%r",
                 mode,
                 query[:80],
                 normalized.rewritten_query[:80],
+                normalized.retrieval_queries,
+                normalized.hypothetical_answer[:200],
             )
             return normalized
     except Exception as e:

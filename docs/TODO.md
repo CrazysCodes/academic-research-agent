@@ -13,7 +13,7 @@
 - [x] 前端 Next.js 16 + React 19 + shadcn/ui
 - [x] Docker Compose（应用 + 基础设施分离）
 - [x] Git 仓库初始化并推送（monorepo → github.com/CrazysCodes/academic-research-agent）
-- [x] 服务器 Qdrant 部署（115.190.79.5:6333，Docker infra 层）
+- [x] 服务器 Milvus 部署（service-init infra 层，19530 端口）
 - [x] 服务器 PostgreSQL 部署（docker-compose.infra.yml，5432 端口）
 - [x] Paper 元数据持久化（SQLAlchemy 异步 + asyncpg + PostgreSQL）
 - [x] 会话历史持久化（conversations / messages 表 + REST API）
@@ -24,21 +24,21 @@
 
 ### 后端
 
-- [x] 依赖安装：`markitdown pymupdf4llm qdrant-client langchain langchain-openai sqlalchemy asyncpg`
+- [x] 依赖安装：`markitdown pymupdf4llm pymilvus langchain langchain-openai sqlalchemy asyncpg`
 - [x] `app/models/` — Paper、ChatRequest、AnalyzeRequest、响应模型
 - [x] `app/db/models.py` — SQLAlchemy ORM 模型（PaperORM、ConversationORM、MessageORM）
 - [x] `app/db/database.py` — 异步 engine + session factory + `init_db()`
 - [x] `app/repositories/paper_repo.py` — 异步 DB Paper CRUD
 - [x] `app/repositories/conversation_repo.py` — 会话 + 消息 CRUD
-- [x] `app/repositories/vector_repo.py` — Qdrant 操作（collection per paper）+ `get_all_chunks()`
+- [x] `app/repositories/vector_repo.py` — Milvus 操作（单 collection + paper_id 过滤）+ `get_all_chunks()`
 - [x] `app/services/doc_service.py` — Word（markitdown）+ PDF（pymupdf4llm）解析
-- [x] `app/services/rag_service.py` — 分块 + OpenAI Embedding + Qdrant 检索
+- [x] `app/services/rag_service.py` — 分块 + DashScope/OpenAI Embedding + Milvus 检索
 - [x] `POST /api/papers/upload` — 上传 → BackgroundTask 异步处理（写 DB）
 - [x] `GET /api/papers` — 论文列表（DB）
 - [x] `GET /api/papers/{id}` — 论文详情
-- [x] `GET /api/papers/{id}/chunks` — 论文切块列表（from Qdrant）
+- [x] `GET /api/papers/{id}/chunks` — 论文切块列表（from Milvus）
 - [x] `GET /api/papers/{id}/status` — 处理状态轮询
-- [x] `DELETE /api/papers/{id}` — 删除论文 + Qdrant collection
+- [x] `DELETE /api/papers/{id}` — 删除论文 + Milvus chunks
 - [x] `POST /api/chat` — RAG 问答 / 通用 LLM 模式（paper_ids 为空时降级），SSE 流式输出
 - [x] `POST /api/analyze` — 多文档对比分析，SSE 流式输出
 - [x] `GET/POST/DELETE/PATCH /api/conversations` — 会话历史 CRUD
@@ -63,7 +63,7 @@
 
 - [x] `OPENAI_BASE_URL` 支持任意 OpenAI 兼容 API（one-api/new-api/Azure）
 - [x] Embedding 独立 API 地址/密钥配置
-- [x] qdrant-client 1.17 API 适配（`search` → `query_points`）
+- [x] Milvus 单 collection 存储适配（`paper_id` 标量过滤）
 - [x] 第三方 Embedding API 兼容（关闭 tiktoken、batch size 限制）
 - [x] 流式输出 markdown 格式渲染（react-markdown + remark-gfm + Tailwind Typography）
 
@@ -72,11 +72,11 @@
 **启动步骤：**
 
 ```bash
-# 1. 启动基础设施（Qdrant + PostgreSQL）
+# 1. 启动基础设施（Milvus + PostgreSQL）
 docker compose -f docker-compose.infra.yml up -d
 
 # 2. 配置并启动后端（backend/ 目录下）
-cp .env.example .env   # 填入 OPENAI_API_KEY、QDRANT_URL、DATABASE_URL
+cp .env.example .env   # 填入 OPENAI_API_KEY、MILVUS_URI、DATABASE_URL
 UV_PROJECT_ENVIRONMENT=../venvs/backend uv run uvicorn app.main:app --reload
 # → http://localhost:8000/docs
 
@@ -88,7 +88,7 @@ npm run dev
 **验收检查清单：**
 
 - [x] `GET /health` 返回 `{"status": "ok"}`
-- [x] 上传 PDF → 解析 → Qdrant 入库
+- [x] 上传 PDF → 解析 → Milvus 入库
 - [x] 点选论文 → 对话页提问 → 流式返回答案（RAG 模式）
 - [x] 未选论文 → 直接提问（通用 LLM 模式）
 - [x] 对话自动保存到 PostgreSQL，刷新后侧边栏可见历史
@@ -100,7 +100,7 @@ npm run dev
 | 现象 | 方向 |
 |------|------|
 | status 一直 processing | 后端日志查 BackgroundTask 报错 |
-| chat 返回 404 "No relevant content" | Qdrant 是否连通，collection 是否创建 |
+| chat 返回 404 "No relevant content" | Milvus 是否连通，collection 是否创建 |
 | 前端收不到 SSE | CORS 配置，`cors_origins` 是否含 `http://localhost:3000` |
 | DB 连接失败 | PostgreSQL 是否启动，DATABASE_URL 是否正确 |
 
@@ -185,6 +185,11 @@ npm run dev
   - **chat 管线**：Query Expansion / HyDE 改进召回（短问题→完整问题，或用猜测答案辅助检索）
 - [x] chat 管线：`POST /api/chat` 接入 QueryRewriteNode，rewrite 后多路 RAG 检索，失败回退原始 query
 - [x] analyze 管线：`_stream_agent` 入口处加 query rewrite，预处理后再进 PlannerNode
+- [ ] Query 意图展开增强：将抽象学术问题自动展开为领域子字段，例如“实验参数”→ GPU/硬件、学习率、batch size、epoch/iteration、optimizer、training settings、implementation details
+- [ ] 检索规划器：对复合问题拆成多个检索槽位并分别召回，例如“实验指标 + 实验参数”应拆成 metrics 子查询和 training-setup 子查询，再合并去重
+- [ ] 问答调试信息：开发模式下返回 rewrite query、retrieval queries、命中 chunk 标题/序号/score，便于定位“模型知道问题但没召回到证据”的情况
+- [ ] Section-aware chunking：PDF/Markdown 切块时保留章节标题与后续正文关系，避免 `4.2 Parameter settings` 这类标题和具体超参数被切到不同孤立 chunk
+- [ ] 小块合并策略：图片占位、短标题块、残句块应与相邻正文合并或带上前置标题路径，提高参数/指标类问题召回稳定性
 
 ### 3.1 报告导出
 
@@ -253,19 +258,14 @@ npm run dev
 > 目标：把 RAG 从"玩具级"提升到"生产级"；加入跨会话长期记忆，实现真正的知识积累。
 > 核心认知：编排器（LangGraph）是通用基础设施，本阶段重点是强化 RAG 质量和 Memory 体系。
 
-### 4.0 VectorStore 抽象 + Milvus 可选迁移
+### 4.0 Milvus 直接替换 Qdrant ✅ 完成
 
-> 评估结论：复杂度中等，可以接受，适合作为可选增强路线；不建议在当前阶段直接替换主线 Qdrant。
+> 2026-05 调整：当前 Qdrant 不可用，直接切换为 Milvus，不做迁移脚本、双写或回滚。
 
-- [ ] 抽象 `VectorStoreRepository` 接口，统一 create / upsert / search / scroll / delete 语义
-- [ ] 保留 `QdrantVectorStoreRepository` 作为默认实现，避免破坏现有 demo
-- [ ] 新增 `MilvusVectorStoreRepository`：
-  - 方案 A：继续 collection per paper，改动小但 collection 数量随论文增长
-  - 方案 B：单 collection + `paper_id` 标量过滤，长期更适合 Milvus，但需要迁移现有查询和 scroll 逻辑
-- [ ] infra 层新增 Milvus standalone docker-compose profile（Milvus + etcd + MinIO）
-- [ ] 配置项：`VECTOR_STORE=qdrant|milvus`、`MILVUS_URI`、`MILVUS_TOKEN`、`MILVUS_COLLECTION`
-- [ ] 迁移脚本：Qdrant scroll 全量 chunk → Milvus bulk insert，校验 chunk_count 和向量维度
-- [ ] 验收：同一 RAG 测试集上 Milvus 与 Qdrant 的 Recall@5 / 延迟 / 成本对比报告
+- [x] `vector_repo.py` 改为 MilvusClient 实现
+- [x] 采用单 collection + `paper_id` 标量过滤
+- [x] 配置项：`MILVUS_URI`、`MILVUS_TOKEN`、`MILVUS_COLLECTION`、`MILVUS_INDEX_TYPE`
+- [ ] 上传 PDF → DashScope embedding → Milvus insert E2E 复测
 
 ### 4.1 混合检索（Hybrid Search）
 
@@ -329,6 +329,14 @@ npm run dev
 - [ ] 记录每次请求的：token 消耗、节点耗时、检索召回率
 - [ ] 慢查询告警（单个节点 > 60s 或 总流程 > 5min）
 - [ ] 每轮 Agent 调用写入审计表（`agent_audit_log`）
+
+### 5.5 Skill 配置系统
+
+- [ ] 后端支持加载项目级 / 用户级 skill 配置（如 `.ara/skills/*.md`、数据库配置或前端设置页）
+- [ ] Skill 元数据：名称、适用意图、触发条件、系统提示片段、工具权限、示例任务
+- [ ] Chat/Analyze 前置 SkillRouter：根据用户问题、选中文献和上下文选择一个或多个 skill 注入 prompt
+- [ ] 前端设置页：启用/禁用 skill、查看说明、调整优先级
+- [ ] 安全策略：限制 skill 可调用工具、记录 skill 命中日志，避免 prompt 注入扩大权限
 
 ---
 

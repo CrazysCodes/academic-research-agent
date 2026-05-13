@@ -12,7 +12,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.utils.json import parse_json_markdown
 from pydantic import BaseModel
 
-from app.core.llm import create_chat_llm, create_structured_llm
+from app.core.llm import create_chat_llm, create_structured_llm, supports_structured_output
 from app.core.state import ResearchState
 
 logger = logging.getLogger(__name__)
@@ -67,15 +67,18 @@ async def planner_node(state: ResearchState) -> dict:
     ]
 
     # ── 方案一：Function Calling 强约束 ──
-    try:
-        structured_llm = create_structured_llm(_PlannerOutput)
-        result: _PlannerOutput = await structured_llm.ainvoke(messages)
-        sub_queries = [str(q) for q in result.sub_queries if q][:5]
-        if sub_queries:
-            logger.info("PlannerNode [structured] 成功，生成 %d 个子查询: %s", len(sub_queries), sub_queries)
-            return {"sub_queries": sub_queries}
-    except Exception as e:
-        logger.warning("PlannerNode [structured] 失败，降级到 parse_json_markdown 方案: %s", e)
+    if supports_structured_output():
+        try:
+            structured_llm = create_structured_llm(_PlannerOutput)
+            result: _PlannerOutput = await structured_llm.ainvoke(messages)
+            sub_queries = [str(q) for q in result.sub_queries if q][:5]
+            if sub_queries:
+                logger.info("PlannerNode [structured] 成功，生成 %d 个子查询: %s", len(sub_queries), sub_queries)
+                return {"sub_queries": sub_queries}
+        except Exception as e:
+            logger.warning("PlannerNode [structured] 失败，降级到 parse_json_markdown 方案: %s", e)
+    else:
+        logger.info("PlannerNode 跳过 structured 输出，使用 parse_json_markdown 方案")
 
     # ── 方案二：普通调用 + parse_json_markdown + retry ──
     llm = create_chat_llm(streaming=False)

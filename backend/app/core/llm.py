@@ -33,6 +33,21 @@ def create_chat_llm(streaming: bool = True) -> ChatOpenAI:
     return ChatOpenAI(**_base_kwargs(streaming))
 
 
+def supports_structured_output() -> bool:
+    """
+    Whether the current provider/model supports forced tool-calling structured output.
+
+    DashScope Qwen3 thinking mode rejects `tool_choice=required/object`, which is
+    what LangChain uses for `with_structured_output(method="function_calling")`.
+    In that case callers should use prompt-based JSON output and parse it.
+    """
+    base_url = settings.openai_base_url.lower()
+    model = settings.llm_model.lower()
+    if "dashscope.aliyuncs.com" in base_url and model.startswith("qwen3"):
+        return False
+    return True
+
+
 def create_structured_llm(schema: type[BaseModel], streaming: bool = False):
     """
     创建绑定了结构化输出的 LLM 实例（方案一：Function Calling 模式）。

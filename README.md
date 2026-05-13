@@ -9,7 +9,7 @@
 | 前端 | Next.js 16 · React 19 · TypeScript · Tailwind CSS · shadcn/ui · Zustand |
 | 后端 | FastAPI · Python 3.11 · Pydantic v2 · uv |
 | AI | LangChain · LangGraph · OpenAI / Anthropic |
-| 向量库 | Qdrant |
+| 向量库 | Milvus |
 | 文档解析 | markitdown (Word) · pymupdf4llm (PDF) |
 | 容器化 | Docker · Docker Compose |
 
@@ -23,7 +23,7 @@ academic-research-agent/
 │   │   ├── services/      # 业务逻辑层
 │   │   ├── core/          # AI 核心 (agents, tools, graph)
 │   │   ├── models/        # Pydantic 请求/响应模型
-│   │   ├── repositories/  # 数据访问层 (PostgreSQL / Qdrant)
+│   │   ├── repositories/  # 数据访问层 (PostgreSQL / Milvus)
 │   │   ├── config.py
 │   │   └── main.py
 │   ├── pyproject.toml
@@ -39,7 +39,7 @@ academic-research-agent/
 │   ├── TODO.md            # 开发路线图
 │   └── images/            # 架构图
 ├── docker-compose.yml         # 应用服务 (frontend + backend)
-└── docker-compose.infra.yml   # 基础设施 (Qdrant, ...)
+└── docker-compose.infra.yml   # 基础设施 (PostgreSQL, Milvus, ...)
 ```
 
 ## 本地开发
