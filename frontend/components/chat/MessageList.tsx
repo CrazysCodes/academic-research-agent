@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import type { ReactNode } from "react"
 import { Check, Copy } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -10,6 +11,7 @@ import type { ChatMessage } from "@/types"
 interface Props {
   messages: ChatMessage[]
   streaming?: string
+  loading?: boolean
   isRagMode?: boolean
   onSuggestion?: (text: string) => void
 }
@@ -42,6 +44,33 @@ function AssistantContent({ content }: { content: string }) {
   )
 }
 
+function AssistantShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex justify-start">
+      <div className="flex items-start gap-2 max-w-[85%]">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-[10px] font-bold text-white shadow-sm mt-0.5">
+          AI
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function LoadingBubble() {
+  return (
+    <AssistantShell>
+      <div className="rounded-2xl rounded-tl-sm bg-card border px-4 py-3 text-sm shadow-sm">
+        <div className="flex items-center gap-1.5 text-muted-foreground" aria-label="AI 正在思考">
+          <span className="h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.2s]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.1s]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-current animate-bounce" />
+        </div>
+      </div>
+    </AssistantShell>
+  )
+}
+
 function EmptyState({ isRagMode, onSelect }: { isRagMode?: boolean; onSelect?: (text: string) => void }) {
   const suggestions = isRagMode
     ? ["这篇论文的核心贡献是什么？", "总结一下实验结果", "和现有方法相比有哪些优势？"]
@@ -71,14 +100,14 @@ function EmptyState({ isRagMode, onSelect }: { isRagMode?: boolean; onSelect?: (
   )
 }
 
-export function MessageList({ messages, streaming, isRagMode, onSuggestion }: Props) {
+export function MessageList({ messages, streaming, loading, isRagMode, onSuggestion }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, streaming])
+  }, [messages, streaming, loading])
 
-  if (!messages.length && !streaming) {
+  if (!messages.length && !streaming && !loading) {
     return <EmptyState isRagMode={isRagMode} onSelect={onSuggestion} />
   }
 
@@ -120,18 +149,15 @@ export function MessageList({ messages, streaming, isRagMode, onSuggestion }: Pr
 
         {/* 流式输出中 */}
         {streaming && (
-          <div className="flex justify-start">
-            <div className="flex items-start gap-2 max-w-[85%]">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-[10px] font-bold text-white shadow-sm mt-0.5">
-                AI
-              </div>
-              <div className="rounded-2xl rounded-tl-sm bg-card border px-4 py-3 text-sm shadow-sm">
-                <AssistantContent content={streaming} />
-                <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-foreground/70 align-middle" />
-              </div>
+          <AssistantShell>
+            <div className="rounded-2xl rounded-tl-sm bg-card border px-4 py-3 text-sm shadow-sm">
+              <AssistantContent content={streaming} />
+              <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-foreground/70 align-middle" />
             </div>
-          </div>
+          </AssistantShell>
         )}
+
+        {loading && !streaming && <LoadingBubble />}
 
         <div ref={bottomRef} />
       </div>

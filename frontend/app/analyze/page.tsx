@@ -25,6 +25,15 @@ import { useAppStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import type { AgentNodeName, Analysis, ChatMessage, DiagramType, NodeOutputData, NodeStep, SectionType } from "@/types"
 
+let initialAnalysesRequest: Promise<Analysis[]> | null = null
+
+function loadInitialAnalyses() {
+  initialAnalysesRequest ??= listAnalyses({ includeFirstDetail: true }).finally(() => {
+    initialAnalysesRequest = null
+  })
+  return initialAnalysesRequest
+}
+
 export default function AnalyzePage() {
   const { papers, selectedPaperIds, togglePaper, setSelectedPaperIds } = useAppStore()
   const [query, setQuery] = useState("")
@@ -36,6 +45,7 @@ export default function AnalyzePage() {
   // 历史记录
   const [history, setHistory] = useState<Analysis[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [historyLoading, setHistoryLoading] = useState(true)
 
   // 对话式优化
   const [refinementMessages, setRefinementMessages] = useState<ChatMessage[]>([])
@@ -53,40 +63,66 @@ export default function AnalyzePage() {
 
   // 加载历史列表
   useEffect(() => {
-    listAnalyses().then(setHistory).catch(() => {})
+    let cancelled = false
+    setHistoryLoading(true)
+    loadInitialAnalyses()
+      .then((rows) => {
+        if (cancelled) return
+        setHistory(rows)
+        if (rows.length > 0) {
+          applyAnalysis(rows[0])
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setError("加载分析历史失败")
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false)
+      })
+    return () => { cancelled = true }
   }, [])
 
   // 从历史加载某条分析
+  function applyAnalysis(a: Analysis) {
+    setActiveId(a.id)
+    setQuery(a.query)
+    setResult(a.result)
+    setError("")
+    setDiagramCode("")
+    setSelectedPaperIds(a.paper_ids ?? [])
+    setRefinementMessages(
+      (a.refinements ?? []).map((r: ChatMessage) => ({ role: r.role, content: r.content }))
+    )
+    if (a.node_outputs) {
+      const steps: NodeStep[] = []
+      const nodeOrder: AgentNodeName[] = ["planner", "retriever", "writer", "reviewer"]
+      for (const [key, data] of Object.entries(a.node_outputs)) {
+        const baseName = key.replace(/_\d+$/, "") as AgentNodeName
+        if (!nodeOrder.includes(baseName)) continue
+        const iteration = steps.filter((s) => s.name === baseName).length + 1
+        steps.push({
+          name: baseName,
+          label: { planner: "规划查询", retriever: "检索文献", writer: "撰写报告", reviewer: "质量评审" }[baseName],
+          iteration,
+          output: data as unknown as NodeOutputData,
+        })
+      }
+      setNodeSteps(steps)
+    } else {
+      setNodeSteps([])
+    }
+  }
+
   async function handleLoadHistory(id: string) {
+    const cached = history.find((a) => a.id === id)
+    if (cached?.result) {
+      applyAnalysis(cached)
+      return
+    }
+
     try {
       const a = await getAnalysis(id)
-      setActiveId(a.id)
-      setQuery(a.query)
-      setResult(a.result)
-      setError("")
-      setDiagramCode("")
-      setSelectedPaperIds(a.paper_ids ?? [])
-      setRefinementMessages(
-        (a.refinements ?? []).map((r: ChatMessage) => ({ role: r.role, content: r.content }))
-      )
-      if (a.node_outputs) {
-        const steps: NodeStep[] = []
-        const nodeOrder: AgentNodeName[] = ["planner", "retriever", "writer", "reviewer"]
-        for (const [key, data] of Object.entries(a.node_outputs)) {
-          const baseName = key.replace(/_\d+$/, "") as AgentNodeName
-          if (!nodeOrder.includes(baseName)) continue
-          const iteration = steps.filter((s) => s.name === baseName).length + 1
-          steps.push({
-            name: baseName,
-            label: { planner: "规划查询", retriever: "检索文献", writer: "撰写报告", reviewer: "质量评审" }[baseName],
-            iteration,
-            output: data as unknown as NodeOutputData,
-          })
-        }
-        setNodeSteps(steps)
-      } else {
-        setNodeSteps([])
-      }
+      applyAnalysis(a)
     } catch {
       setError("加载历史记录失败")
     }
@@ -250,7 +286,13 @@ export default function AnalyzePage() {
         </div>
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-0.5">
-            {history.length === 0 ? (
+            {historyLoading && history.length === 0 ? (
+              <div className="space-y-1 px-1 py-2">
+                <div className="h-7 rounded-md bg-muted animate-pulse" />
+                <div className="h-7 rounded-md bg-muted/70 animate-pulse" />
+                <div className="h-7 rounded-md bg-muted/50 animate-pulse" />
+              </div>
+            ) : history.length === 0 ? (
               <p className="text-xs text-muted-foreground px-2 py-3 text-center">
                 暂无分析记录
               </p>

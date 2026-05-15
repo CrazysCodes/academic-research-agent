@@ -13,10 +13,32 @@
 - [x] 前端 Next.js 16 + React 19 + shadcn/ui
 - [x] Docker Compose（应用 + 基础设施分离）
 - [x] Git 仓库初始化并推送（monorepo → github.com/CrazysCodes/academic-research-agent）
-- [x] 服务器 Milvus 部署（service-init infra 层，19530 端口）
-- [x] 服务器 PostgreSQL 部署（docker-compose.infra.yml，5432 端口）
+- [x] 服务器公共基础设施已部署（`/srv/services/compose/docker-compose.infra.yml`，PostgreSQL / Redis / Milvus 等）
+- [x] 服务器 Milvus 部署（service-init infra 层，19530 端口，仅监听内网/本机）
+- [x] 服务器 PostgreSQL 部署（service-init infra 层，5432 端口，仅监听内网/本机）
 - [x] Paper 元数据持久化（SQLAlchemy 异步 + asyncpg + PostgreSQL）
 - [x] 会话历史持久化（conversations / messages 表 + REST API）
+
+---
+
+## 部署约定（2026-05）
+
+- 服务器环境：基础设施已经由服务器级 `server-infra` 统一部署，本项目部署/调试时不需要再执行仓库内的 `docker-compose.infra.yml`。
+- 本地/他人使用：仓库内 `docker-compose.infra.yml` 只作为独立运行本项目的本地基础设施模板，包含 PostgreSQL、Redis、Milvus 及 Milvus 所需的 etcd/minio。
+- 远程调试：本机通过 SSH tunnel 连接服务器内网端口，例如 `15432 -> PostgreSQL`、`16379 -> Redis`、`19530 -> Milvus`。
+- 配置原则：后端只关心 `DATABASE_URL`、`MILVUS_URI`、后续 Redis 配置等连接串，不绑定基础设施具体部署方式。
+
+---
+
+## 当前 TODO 执行顺序（建议）
+
+1. 先完成 Milvus E2E 复测：上传 PDF → DashScope embedding → Milvus insert → chat/analyze 检索命中。
+2. 再补 RAG 可观测调试信息：开发模式返回/记录 rewrite query、retrieval queries、chunk index、score。
+3. 然后做 chunk 质量改进：Section-aware chunking + 小块合并，优先解决实验参数/指标类召回不稳。
+4. 接着建立最小 RAG 评估集：先做 20~30 条 golden QA 和检索 Recall@k 脚本，再扩展到完整评估体系。
+5. 之后再进入生产级 RAG：Hybrid Search → Re-ranker → Citation Grounding。
+6. 最后做 Memory、MCP、Intent、Observability、CI/CD/JWT/A2A 等工程扩展。
+7. Java Spring AI 重写放在 Python 版本稳定后进行，避免两个后端同时漂移。
 
 ---
 
@@ -72,7 +94,8 @@
 **启动步骤：**
 
 ```bash
-# 1. 启动基础设施（Milvus + PostgreSQL）
+# 1. 本地/他人使用时启动基础设施（PostgreSQL + Redis + Milvus）
+#    服务器部署时跳过这一步，直接使用服务器已有 server-infra
 docker compose -f docker-compose.infra.yml up -d
 
 # 2. 配置并启动后端（backend/ 目录下）
@@ -185,7 +208,8 @@ npm run dev
   - **chat 管线**：Query Expansion / HyDE 改进召回（短问题→完整问题，或用猜测答案辅助检索）
 - [x] chat 管线：`POST /api/chat` 接入 QueryRewriteNode，rewrite 后多路 RAG 检索，失败回退原始 query
 - [x] analyze 管线：`_stream_agent` 入口处加 query rewrite，预处理后再进 PlannerNode
-- [ ] Query 意图展开增强：将抽象学术问题自动展开为领域子字段，例如“实验参数”→ GPU/硬件、学习率、batch size、epoch/iteration、optimizer、training settings、implementation details
+- [x] Query 意图展开（prompt 级）：将抽象学术问题自动展开为领域子字段，例如“实验参数”→ GPU/硬件、学习率、batch size、epoch/iteration、optimizer、training settings、implementation details
+- [ ] Query 意图展开（结构化版）：将领域子字段输出为稳定 schema，便于后续检索规划器按槽位召回
 - [ ] 检索规划器：对复合问题拆成多个检索槽位并分别召回，例如“实验指标 + 实验参数”应拆成 metrics 子查询和 training-setup 子查询，再合并去重
 - [ ] 问答调试信息：开发模式下返回 rewrite query、retrieval queries、命中 chunk 标题/序号/score，便于定位“模型知道问题但没召回到证据”的情况
 - [ ] Section-aware chunking：PDF/Markdown 切块时保留章节标题与后续正文关系，避免 `4.2 Parameter settings` 这类标题和具体超参数被切到不同孤立 chunk
@@ -375,7 +399,7 @@ npm run dev
 
 ---
 
-## Phase 5 — Java Spring AI 重写（Python demo 完成后）
+## Phase 8 — Java Spring AI 重写（Python demo 完成后）
 
 > 技术路线决策：先 Python 完成完整 demo，再 1:1 用 Spring AI 重写，满足 Java 技术栈公司的面试需求。
 > 详细分析见 [career-plan.md](./career-plan.md#语言技术路线决策2026-03-定稿)
@@ -386,7 +410,7 @@ npm run dev
 |--------|----------------|
 | `ChatOpenAI` | `ChatClient (OpenAI)` |
 | `OpenAIEmbeddings` | `EmbeddingClient` |
-| `Qdrant VectorStore` | `QdrantVectorStore` |
+| `MilvusClient / Milvus collection` | Spring AI VectorStore 或 Milvus Java SDK |
 | `LangGraph StateGraph` | `Spring AI Advisor Chain + 手动状态机` |
 | `FastAPI Router` | `Spring MVC @RestController` |
 | `SQLAlchemy async` | `Spring Data JPA + R2DBC` |
@@ -396,7 +420,7 @@ npm run dev
 - [ ] 新建 `academic-research-agent-java` 仓库（或同仓库 `backend-java/` 子目录）
 - [ ] Spring Boot 项目骨架（Spring AI + Web + Data JPA + PostgreSQL）
 - [ ] Paper 上传 + 解析（Apache PDFBox / iText → markdown）
-- [ ] Embedding + Qdrant 入库（Spring AI QdrantVectorStore）
+- [ ] Embedding + Milvus 入库（Spring AI VectorStore 或 Milvus Java SDK）
 - [ ] RAG 检索问答（ChatClient + EmbeddingClient + SSE 流式）
 - [ ] 会话历史持久化（Spring Data JPA）
 - [ ] Agent 功能迁移（Spring AI Advisor Chain）
@@ -417,6 +441,7 @@ npm run dev
 | 2026-03 | PDF 解析用 BackgroundTasks | 避免 HTTP 超时，前端轮询 /status |
 | 2026-03 | Paper 元数据用 PostgreSQL | 持久化，与会话历史统一数据源，重启不丢数据 |
 | 2026-03 | 向量库选用 Qdrant | 中等规模最优解：性能好、生态全、部署简单。Vearch 社区弱/无BM25 |
+| 2026-05 | 向量库切换到 Milvus | 服务器已有 Milvus 基础设施，采用单 collection + paper_id 过滤，仓库内 infra 仅供本地/他人独立部署 |
 | 2026-03 | 支持自定义 OpenAI Base URL | 兼容 one-api/new-api/Azure 等代理，不绑死官方 |
 | 2026-03 | RAG + 长上下文互补策略 | RAG 做粗筛(成本低、引用溯源)，长上下文做精读(深度推理) |
 | 2026-03 | SQLAlchemy async + asyncpg | 与 FastAPI async 生态一致，PostgreSQL 异步驱动性能好 |

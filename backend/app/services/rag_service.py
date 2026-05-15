@@ -36,6 +36,7 @@ _splitter_fingerprint: tuple = ()
 
 @dataclass
 class DashscopeMultimodalEmbeddings:
+    # DashScope 多模态 embedding 接口和 OpenAI embedding 返回格式不同，这里做成兼容适配器。
     model: str
     api_key: str
     endpoint: str
@@ -73,6 +74,7 @@ class DashscopeMultimodalEmbeddings:
 
     async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
         vectors: list[list[float]] = []
+        # DashScope 单次请求不宜过大；按小批量发送，避免网关或模型服务拒绝。
         for i in range(0, len(texts), self.chunk_size):
             batch = texts[i : i + self.chunk_size]
             contents = [{"text": text} for text in batch]
@@ -107,6 +109,7 @@ def _get_embeddings() -> EmbeddingClient:
 
     if _embeddings is None or _embeddings_fingerprint != fingerprint:
         if _is_dashscope_multimodal(base_url, settings.embedding_model):
+            # tongyi-embedding-vision* 走 DashScope 原生多模态 endpoint，不经过 OpenAIEmbeddings。
             if not api_key:
                 raise ValueError("DASHSCOPE_API_KEY is required for DashScope multimodal embedding")
             _embeddings = DashscopeMultimodalEmbeddings(
@@ -155,6 +158,7 @@ def _preview(text: str, limit: int = 120) -> str:
 
 async def index_paper(paper_id: str, markdown_text: str) -> int:
     """Chunk → embed → store in Milvus. Returns chunk count."""
+    # 摄入链路：解析后的 Markdown 先分块，再向量化，最后按 paper_id 写入共享 Milvus collection。
     chunks = chunk_text(markdown_text)
     if not chunks:
         return 0
@@ -192,6 +196,7 @@ async def retrieve_multi(paper_ids: list[str], queries: list[str], top_k: int = 
     seen: set[str] = set()
     chunks: list[str] = []
     max_len = max((len(result) for _, result in per_query_results), default=0)
+    # 多路 query 的结果按轮询合并，避免某一个 query 的相似结果挤掉其他检索意图。
     for rank in range(max_len):
         for query, result in per_query_results:
             if rank >= len(result):

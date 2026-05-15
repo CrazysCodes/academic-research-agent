@@ -18,3 +18,7 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+.agents/*
+!.agents/skills/
+!.agents/skills/project-rules/
+!.agents/skills/project-rules/SKILL.md

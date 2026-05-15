@@ -79,6 +79,7 @@ def _dedupe(items: list[str]) -> list[str]:
 
 
 def _fallback(query: str) -> QueryRewriteResult:
+    # Query Rewrite 是增强链路，不应阻断主流程；失败时保持原问题继续检索。
     return QueryRewriteResult(
         rewritten_query=query,
         retrieval_queries=[query],
@@ -87,6 +88,7 @@ def _fallback(query: str) -> QueryRewriteResult:
 
 
 def _normalize(query: str, result: QueryRewriteResult) -> QueryRewriteResult:
+    # 统一清洗 LLM 输出：保证 rewritten_query 非空，并限制检索 query 数量，避免一次请求打爆 embedding 成本。
     rewritten = result.rewritten_query.strip() or query
     retrieval_queries = _dedupe([rewritten, *result.retrieval_queries])[:_MAX_RETRIEVAL_QUERIES]
     return QueryRewriteResult(
@@ -98,6 +100,7 @@ def _normalize(query: str, result: QueryRewriteResult) -> QueryRewriteResult:
 
 def retrieval_texts(result: QueryRewriteResult) -> list[str]:
     """Return query texts to embed for retrieval, including optional HyDE text."""
+    # HyDE 文本只作为检索向量，不直接展示给用户；它能帮助短 query 命中更接近答案形态的 chunk。
     texts = [*result.retrieval_queries]
     if result.hypothetical_answer:
         texts.append(result.hypothetical_answer)
@@ -126,6 +129,7 @@ async def _rewrite(query: str, system_prompt: str, mode: str) -> QueryRewriteRes
 
     if supports_structured_output():
         try:
+            # 优先走 function calling，能让支持 tool_choice 的模型直接返回 Pydantic 结构。
             structured_llm = create_structured_llm(QueryRewriteResult)
             result: QueryRewriteResult = await structured_llm.ainvoke(messages)
             normalized = _normalize(query, result)
@@ -142,6 +146,7 @@ async def _rewrite(query: str, system_prompt: str, mode: str) -> QueryRewriteRes
         logger.info("QueryRewriteNode [%s] 跳过 structured 输出，使用普通 JSON 解析", mode)
 
     try:
+        # 部分 OpenAI 兼容服务不支持强制 tool calling，退回到“提示词 JSON + parse_json_markdown”。
         llm = create_chat_llm(streaming=False)
         response = await llm.ainvoke(messages)
         logger.info("QueryRewriteNode [%s][json] raw: %r", mode, str(response.content)[:1000])

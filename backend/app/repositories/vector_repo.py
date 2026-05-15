@@ -36,6 +36,7 @@ def _quote(value: str) -> str:
 
 
 def _paper_filter(paper_id: str) -> str:
+    # Milvus filter 表达式需要字符串字面量转义，统一走 json.dumps 避免特殊字符破坏查询。
     return f"paper_id == {_quote(paper_id)}"
 
 
@@ -59,6 +60,7 @@ def create_collection(_paper_id: str | None = None, vector_dim: int | None = Non
     name = collection_name()
     dim = vector_dim or settings.embedding_dim
     if client.has_collection(name):
+        # embedding 模型切换后维度可能变化；维度不一致时必须显式重建 collection。
         existing_dim = _collection_vector_dim(client, name)
         if existing_dim is not None and existing_dim != dim:
             raise ValueError(
@@ -72,6 +74,7 @@ def create_collection(_paper_id: str | None = None, vector_dim: int | None = Non
         auto_id=False,
         enable_dynamic_field=False,
     )
+    # 单 collection 设计：用 paper_id 做标量过滤，比“每篇论文一个 collection”更适合 Milvus 管理。
     schema.add_field("id", DataType.VARCHAR, is_primary=True, max_length=128)
     schema.add_field("paper_id", DataType.VARCHAR, max_length=64)
     schema.add_field("chunk_index", DataType.INT64)
@@ -112,7 +115,7 @@ def upsert_chunks(paper_id: str, chunks: list[str], embeddings: list[list[float]
             settings.embedding_dim,
         )
 
-    # Re-indexing the same paper should replace its old chunks.
+    # 同一篇论文重复上传/重建索引时，先删旧 chunk，避免检索命中新旧版本混杂。
     delete_collection(paper_id)
 
     rows = [
@@ -141,6 +144,7 @@ def search(
     if not client.has_collection(name):
         return []
 
+    # Milvus 返回值里保留 paper_id/chunk_index，日志可用于排查“召回不到证据”的问题。
     quoted_ids = ", ".join(_quote(pid) for pid in paper_ids)
     expr = f"paper_id in [{quoted_ids}]"
     result = client.search(

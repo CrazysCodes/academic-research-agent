@@ -45,10 +45,15 @@ async def get_conversation(db: AsyncSession, conv_id: str) -> ConversationORM | 
     return result.scalar_one_or_none()
 
 
-async def list_conversations(db: AsyncSession) -> list[ConversationORM]:
+async def list_conversations(db: AsyncSession, *, include_messages: bool = False) -> list[ConversationORM]:
+    options = [selectinload(ConversationORM.paper_links)]
+    if include_messages:
+        # 首屏默认选中最近会话时，列表接口可一次带回消息，避免前端再串行请求详情。
+        options.append(selectinload(ConversationORM.messages))
+
     result = await db.execute(
         select(ConversationORM)
-        .options(selectinload(ConversationORM.paper_links))
+        .options(*options)
         .order_by(ConversationORM.updated_at.desc())
     )
     return list(result.scalars())

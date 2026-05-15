@@ -86,8 +86,9 @@ export async function streamChat(
 
 // ---------- Conversations ----------
 
-export async function listConversations(): Promise<Conversation[]> {
-  return request<Conversation[]>("/api/conversations")
+export async function listConversations(options?: { includeFirstMessages?: boolean }): Promise<Conversation[]> {
+  const query = options?.includeFirstMessages ? "?include_first_messages=true" : ""
+  return request<Conversation[]>(`/api/conversations${query}`)
 }
 
 export async function createConversation(title: string, paperIds: string[]): Promise<Conversation> {
@@ -182,8 +183,9 @@ export async function streamAnalyze(
 
 // ---------- Analysis History ----------
 
-export async function listAnalyses(): Promise<Analysis[]> {
-  return request<Analysis[]>("/api/analyze/history")
+export async function listAnalyses(options?: { includeFirstDetail?: boolean }): Promise<Analysis[]> {
+  const query = options?.includeFirstDetail ? "?include_first_detail=true" : ""
+  return request<Analysis[]>(`/api/analyze/history${query}`)
 }
 
 export async function getAnalysis(id: string): Promise<Analysis> {

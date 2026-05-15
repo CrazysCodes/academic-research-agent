@@ -3,7 +3,7 @@ Analysis 历史记录 Repository。
 """
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import defer, selectinload
 
 from app.db.models import AnalysisORM, AnalysisPaperORM
 
@@ -36,10 +36,19 @@ async def create(
     return analysis
 
 
-async def list_all(db: AsyncSession) -> list[AnalysisORM]:
+async def list_all(db: AsyncSession, *, include_detail: bool = True) -> list[AnalysisORM]:
+    options = [selectinload(AnalysisORM.paper_links)]
+    if not include_detail:
+        # 历史侧栏只需要摘要字段，跳过报告正文/节点输出等大字段，首屏会更快。
+        options.extend([
+            defer(AnalysisORM.result),
+            defer(AnalysisORM.node_outputs),
+            defer(AnalysisORM.refinements),
+        ])
+
     result = await db.execute(
         select(AnalysisORM)
-        .options(selectinload(AnalysisORM.paper_links))
+        .options(*options)
         .order_by(AnalysisORM.created_at.desc())
     )
     return list(result.scalars())

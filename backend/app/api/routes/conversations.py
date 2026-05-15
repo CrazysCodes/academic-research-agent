@@ -1,7 +1,7 @@
 """
 会话历史 CRUD 路由。
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,9 +68,17 @@ async def create_conversation(
 
 
 @router.get("", response_model=list[ConversationSchema])
-async def list_conversations(db: AsyncSession = Depends(get_db_session)):
+async def list_conversations(
+    include_first_messages: bool = Query(False),
+    db: AsyncSession = Depends(get_db_session),
+):
     convs = await conversation_repo.list_conversations(db)
-    return [_to_schema(c) for c in convs]
+    if include_first_messages and convs:
+        first = await conversation_repo.get_conversation(db, convs[0].id)
+        if first:
+            convs[0] = first
+    # 首屏默认只需要第一条会话的消息，其余历史仍保持轻量列表，避免 payload 过大。
+    return [_to_schema(c, include_messages=include_first_messages and i == 0) for i, c in enumerate(convs)]
 
 
 @router.get("/{conv_id}", response_model=ConversationSchema)

@@ -4,7 +4,7 @@
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -306,25 +306,33 @@ async def refine_analysis(
 # ────────────── 分析历史 CRUD ──────────────
 
 
-def _format_analysis(a) -> dict:
+def _format_analysis(a, *, include_detail: bool = True) -> dict:
     return {
         "id": a.id,
         "query": a.query,
         "mode": a.mode,
         "paper_ids": [link.paper_id for link in a.paper_links],
-        "result": a.result,
+        "result": a.result if include_detail else "",
         "score": a.score,
         "iterations": a.iterations,
-        "node_outputs": a.node_outputs,
-        "refinements": a.refinements or [],
+        "node_outputs": a.node_outputs if include_detail else {},
+        "refinements": (a.refinements or []) if include_detail else [],
         "created_at": a.created_at,
     }
 
 
 @router.get("/history")
-async def list_analyses(db: AsyncSession = Depends(get_db_session)):
-    rows = await analysis_repo.list_all(db)
-    return [_format_analysis(a) for a in rows]
+async def list_analyses(
+    include_first_detail: bool = Query(False),
+    db: AsyncSession = Depends(get_db_session),
+):
+    rows = await analysis_repo.list_all(db, include_detail=not include_first_detail)
+    if include_first_detail and rows:
+        first = await analysis_repo.get(db, rows[0].id)
+        if first:
+            rows[0] = first
+    # 历史列表默认保持轻量；首屏需要默认展示第一条时，只给第一条带完整报告详情。
+    return [_format_analysis(a, include_detail=not include_first_detail or i == 0) for i, a in enumerate(rows)]
 
 
 @router.get("/history/{analysis_id}")

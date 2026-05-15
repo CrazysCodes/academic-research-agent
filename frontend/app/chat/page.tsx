@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Plus, Trash2 } from "lucide-react"
 import { MessageList } from "@/components/chat/MessageList"
 import { ChatInput } from "@/components/chat/ChatInput"
@@ -16,7 +16,16 @@ import {
 } from "@/lib/api"
 import { useAppStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import type { ChatMessage } from "@/types"
+import type { ChatMessage, Conversation } from "@/types"
+
+let initialConversationsRequest: Promise<Conversation[]> | null = null
+
+function loadInitialConversations() {
+  initialConversationsRequest ??= listConversations({ includeFirstMessages: true }).finally(() => {
+    initialConversationsRequest = null
+  })
+  return initialConversationsRequest
+}
 
 export default function ChatPage() {
   const {
@@ -37,17 +46,37 @@ export default function ChatPage() {
 
   const [streaming, setStreaming] = useState("")
   const [loading, setLoading] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const activeConversationIdRef = useRef(activeConversationId)
 
   const readyPapers = papers.filter((p) => p.status === "ready")
   const isRagMode = selectedPaperIds.length > 0
 
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId
+  }, [activeConversationId])
+
   // 加载对话历史列表
   useEffect(() => {
-    listConversations()
-      .then(setConversations)
-      .catch(() => {})
-  }, [setConversations])
+    let cancelled = false
+    setHistoryLoading(true)
+    loadInitialConversations()
+      .then((rows) => {
+        if (cancelled) return
+        setConversations(rows)
+        if (!activeConversationIdRef.current && rows.length > 0) {
+          setActiveConversation(rows[0])
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setError("加载对话历史失败")
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [setActiveConversation, setConversations])
 
   const handleNewChat = () => {
     setActiveConversation(null)
@@ -135,7 +164,13 @@ export default function ChatPage() {
         </div>
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-0.5">
-            {conversations.length === 0 ? (
+            {historyLoading && conversations.length === 0 ? (
+              <div className="space-y-1 px-1 py-2">
+                <div className="h-7 rounded-md bg-muted animate-pulse" />
+                <div className="h-7 rounded-md bg-muted/70 animate-pulse" />
+                <div className="h-7 rounded-md bg-muted/50 animate-pulse" />
+              </div>
+            ) : conversations.length === 0 ? (
               <p className="text-xs text-muted-foreground px-2 py-3 text-center">暂无对话记录</p>
             ) : (
               conversations.map((conv) => (
@@ -165,6 +200,7 @@ export default function ChatPage() {
           <MessageList
             messages={messages as ChatMessage[]}
             streaming={streaming || undefined}
+            loading={loading}
             isRagMode={isRagMode}
             onSuggestion={handleSend}
           />
