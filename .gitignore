@@ -11,6 +11,9 @@ venvs/
 *.env
 .env.local
 
+# Local planning and personal notes
+docs/
+
 # OS
 .DS_Store
 Thumbs.db

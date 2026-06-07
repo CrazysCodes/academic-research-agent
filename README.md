@@ -34,10 +34,6 @@ academic-research-agent/
 │   ├── lib/               # API 封装、Zustand store
 │   ├── types/             # 共享类型定义
 │   └── Dockerfile
-├── docs/                  # 文档
-│   ├── tech-spec.md       # 技术方案
-│   ├── TODO.md            # 开发路线图
-│   └── images/            # 架构图
 ├── docker-compose.yml         # 应用服务 (frontend + backend)
 └── docker-compose.infra.yml   # 基础设施 (PostgreSQL, Milvus, ...)
 ```
@@ -135,9 +131,3 @@ docker compose -f docker-compose.infra.yml up -d
 # 应用服务
 docker compose up -d --build
 ```
-
-## 文档
-
-- [技术方案](docs/tech-spec.md)
-- [开发路线图](docs/TODO.md)
-- [系统架构图](docs/images/system-architecture.drawio.png)
